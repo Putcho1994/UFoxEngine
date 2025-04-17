@@ -7,71 +7,96 @@ module;
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
-
+#include <vulkan/vulkan_core.h>
 
 export module ufox_windowing;
-       // import declaration
+// import declaration
 
 import fmt;
 import vulkan_hpp;
+import ufoxUtils;
 
-export namespace ufox::windowing::SDL
-{
+export namespace ufox::windowing {
+    class SDLException : public std::runtime_error {
+    public:
+        explicit SDLException(const std::string &msg) : std::runtime_error(msg + ": " + SDL_GetError()) {
+        }
+    };
 
-       // Custom deleter for SDL_Window
+    class UfoxWindow {
+        std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window{nullptr, SDL_DestroyWindow};
 
-       struct SDLWindowDeleter {
-              void operator()(SDL_Window* window) const {
-                     if (window) {
-                            SDL_DestroyWindow(window);
-                     }
-              }
-       };
+        PFN_vkGetInstanceProcAddr getInstanceProcAddr = nullptr;
 
-       // Type alias for unique_ptr with SDL_Window and SDLWindowDeleter
-       using Window = std::unique_ptr<SDL_Window, SDLWindowDeleter>;
-
-       class SDLException : public std::runtime_error {
-       public:
-              explicit SDLException(const std::string& msg) : std::runtime_error(msg + ": " + SDL_GetError()) {}
-       };
-
-
-       Window CreateWindow(const char* title, Uint32 flags) {
-              vk::Bool32 hhh = true;
-
-              if (!SDL_Init(SDL_INIT_VIDEO)) throw SDLException("Failed to initialize SDL");
-              if (!SDL_Vulkan_LoadLibrary(nullptr)) throw SDLException("Failed to load Vulkan library");
-
-              SDL_DisplayID primary = SDL_GetPrimaryDisplay();
-              SDL_Rect usableBounds{};
-              SDL_GetDisplayUsableBounds(primary, &usableBounds);
+    public:
+        void Init(const char *title, Uint32 flags) {
 
 #ifdef UFOX_DEBUG
-              fmt::println("Display usable bounds: {}x{}", usableBounds.w, usableBounds.h);
+            utils::logger::BeginDebugBlog("WINDOWING");
 #endif
 
-              Window window {nullptr, SDLWindowDeleter()};
+            if (!SDL_Init(SDL_INIT_VIDEO)) throw SDLException("Failed to initialize SDL");
 
-              window.reset(SDL_CreateWindow(
-                  title,
-                  usableBounds.w - 4, usableBounds.h - 34, // Account for title bar and resize handle
-                  flags));
-              if (!window) throw SDLException("Failed to create window");
+            SDL_DisplayID primary = SDL_GetPrimaryDisplay();
+            SDL_Rect usableBounds{};
+            SDL_GetDisplayUsableBounds(primary, &usableBounds);
 
-              SDL_SetWindowPosition(window.get(), 2, 32);
+            // Create window while ensuring proper cleanup on failure
+            SDL_Window *rawWindow = SDL_CreateWindow(
+                title,
+                usableBounds.w - 4, usableBounds.h - 34, // Title bar & resize handle
+                flags
+            );
+
+            if (!rawWindow) {
+                throw SDLException("Failed to create window");
+            }
+
+            window.reset(rawWindow);
+
+            SDL_SetWindowPosition(window.get(), 2, 32);
 
 #ifdef UFOX_DEBUG
-              fmt::println("Window : name {} : successfully created", title);
+            utils::logger::log_debug("Create SDL Window", "success");
 #endif
 
+            if (flags & SDL_WINDOW_VULKAN) {
+                if (!SDL_Vulkan_LoadLibrary(nullptr)) throw SDLException("Failed to load Vulkan library");
 
+#ifdef UFOX_DEBUG
+                utils::logger::log_debug("Load Vulkan Library", "success");
+#endif
 
-              return window;
-       }
+                auto instanceProcAddr = SDL_Vulkan_GetVkGetInstanceProcAddr();
+                if (!instanceProcAddr) {
+                    throw SDLException("Failed to get vkGetInstanceProcAddr");
+                }
+                getInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(instanceProcAddr);
 
+#ifdef UFOX_DEBUG
+                utils::logger::log_debug("Get InstanceProcAddr", "success");
+                utils::logger::log_debug("Windowing Init", "complete");
+                utils::logger::EndDebugBlog();
+#endif
 
+            }
+        }
 
+        [[nodiscard]] PFN_vkGetInstanceProcAddr GetVkGetInstanceProcAddr() const {
+            return getInstanceProcAddr;
+        }
 
+        void CreateSurface(const vk::raii::Instance &vkInstance, std::optional<vk::raii::SurfaceKHR> &vkSurface) const {
+            VkSurfaceKHR surface;
+            if (!SDL_Vulkan_CreateSurface(window.get(), *vkInstance, nullptr, &surface)) {
+                throw SDLException("Failed to create surface");
+            }
 
+            vkSurface.emplace(vkInstance, surface);
+        }
+
+        [[nodiscard]] bool ShowWindow() const { return SDL_ShowWindow(window.get()); }
+        void HideWindow() const { SDL_HideWindow(window.get()); }
+        void CloseWindow() const { SDL_DestroyWindow(window.get()); }
+    };
 }

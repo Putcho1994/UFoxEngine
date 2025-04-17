@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.30)
 
+
+
 project(UFoxEngine  LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -11,8 +13,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 
 
 
-
-add_executable(UFoxEngine )
+add_executable(UFoxEngine)
 target_compile_features(UFoxEngine PUBLIC cxx_std_23
 )
 target_sources(UFoxEngine
@@ -20,6 +21,21 @@ target_sources(UFoxEngine
         FILE_SET CXX_MODULES
         BASE_DIRS ${CMAKE_SOURCE_DIR}
         FILES main.ixx
+)
+
+add_library(UFox-Util STATIC)
+
+target_compile_features(UFox-Util PUBLIC cxx_std_23
+)
+
+# Make the library's include directories public to dependents
+target_include_directories(UFox-Util PUBLIC ${CMAKE_SOURCE_DIR})
+
+# Specify modules using target_sources with the CXX_MODULES file set
+target_sources(UFox-Util
+        PUBLIC FILE_SET CXX_MODULES
+        BASE_DIRS "${CMAKE_SOURCE_DIR}"
+        FILES "ufox_utils.ixx"
 )
 
 
@@ -60,9 +76,16 @@ target_link_libraries(VulkanHppModule PUBLIC Vulkan-Headers )
 
 add_subdirectory(Windowing)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC UFox-Windowing VulkanHppModule SDL3::SDL3 fmt::fmt)
-target_link_libraries(UFox-Windowing PUBLIC  VulkanHppModule SDL3::SDL3 fmt::fmt)
+target_compile_definitions(UFox-Windowing PUBLIC
+        UFOX_DEBUG
+)
 
+set(LIBS)
+list(APPEND LIBS VulkanHppModule SDL3::SDL3 fmt::fmt)
+
+target_link_libraries(${PROJECT_NAME} PUBLIC ${LIBS} UFox-Windowing UFox-Util)
+target_link_libraries(UFox-Windowing PUBLIC  ${LIBS} UFox-Util)
+target_link_libraries(UFox-Util PUBLIC ${LIBS})
 
 
 

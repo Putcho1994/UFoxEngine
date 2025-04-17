@@ -14,19 +14,20 @@ import ufox_windowing;
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
+import ufoxUtils;
 
 
 export module main; // Declare the module first
 
-
-
-
 export int main() {
-    std::optional mainWindow = ufox::windowing::SDL::CreateWindow("UFox Engine", SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN |SDL_WINDOW_MAXIMIZED);
+    ufox::utils::logger::restart_timer();
 
-    SDL_ShowWindow(mainWindow->get());
+    ufox::windowing::UfoxWindow window{};
+    window.Init("UFox Engine", SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN |SDL_WINDOW_MAXIMIZED);
 
-    vk::Bool32 hhh = true;
+
+
+    vk::Bool32 hhh = window.ShowWindow();
     bool isQuit = false;
 
     while (!isQuit) {
