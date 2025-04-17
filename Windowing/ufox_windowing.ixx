@@ -1,5 +1,5 @@
 //
-// Created by b-boy on 13.04.2025.
+// Created by Putcho on 13.04.2025.
 //
 module;
 
@@ -14,7 +14,7 @@ export module ufox_windowing;
 
 import fmt;
 import vulkan_hpp;
-import ufoxUtils;
+import ufox_utils;
 
 export namespace ufox::windowing {
     class SDLException : public std::runtime_error {
@@ -32,7 +32,7 @@ export namespace ufox::windowing {
         void Init(const char *title, Uint32 flags) {
 
 #ifdef UFOX_DEBUG
-            utils::logger::BeginDebugBlog("WINDOWING");
+            utils::logger::BeginDebugBlog("[INIT WINDOWING] (SDL3)");
 #endif
 
             if (!SDL_Init(SDL_INIT_VIDEO)) throw SDLException("Failed to initialize SDL");

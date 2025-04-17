@@ -1,21 +1,19 @@
+//
+// Created by Putcho on 13.04.2025.
+//
 module;
-//
-// Created by b-boy on 13.04.2025.
-//
 
 #include <SDL3/SDL.h> // Include SDL's traditional header
-#include <optional>
 
 
-#include <vulkan/vulkan_hpp_macros.hpp>
+
+
 import vulkan_hpp;
 import ufox_windowing;
-#if VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1
-VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#endif
 
-import ufoxUtils;
 
+import ufox_utils;
+import ufox_graphic_device;
 
 export module main; // Declare the module first
 
@@ -25,9 +23,11 @@ export int main() {
     ufox::windowing::UfoxWindow window{};
     window.Init("UFox Engine", SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN |SDL_WINDOW_MAXIMIZED);
 
+    ufox::graphic_device::vulkan::UfoxGraphicDevice graphicDevice(window);
+    graphicDevice.Init();
 
+    bool mainWinIsShow = window.ShowWindow();
 
-    vk::Bool32 hhh = window.ShowWindow();
     bool isQuit = false;
 
     while (!isQuit) {

@@ -1,3 +1,7 @@
+//
+// Created by Putcho on 16.04.2025.
+//
+
 module;
 #include <chrono>
 
@@ -16,7 +20,7 @@ module;
 #include <unistd.h>
 #endif
 
-export module ufoxUtils;
+export module ufox_utils;
 
 import fmt;
 
@@ -92,7 +96,7 @@ export namespace ufox::utils::logger {
     }
 
     inline void BeginDebugBlog(const std::string& name) {
-        fmt::print("\n[{}]\n", name);
+        fmt::print("\n{}\n", name);
         show_headers();
     }
 

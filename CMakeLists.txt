@@ -62,30 +62,32 @@ target_sources(VulkanHppModule
 target_compile_definitions(VulkanHppModule PUBLIC
         # Your options here, project-dependent:
         # https://github.com/KhronosGroup/Vulkan-Hpp#configuration-options
-        VULKAN_HPP_NO_SMART_HANDLE
-        VULKAN_HPP_NO_EXCEPTIONS
-        VULKAN_HPP_NO_CONSTRUCTORS
-
+        "VULKAN_HPP_NO_SMART_HANDLE=ON"
+        "VULKAN_HPP_NO_EXCEPTIONS=ON"
+        "VULKAN_HPP_NO_CONSTRUCTORS=ON"
+        "VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=OFF"
 
 )
 
 target_compile_features(VulkanHppModule PUBLIC cxx_std_23)
 target_link_libraries(VulkanHppModule PUBLIC Vulkan-Headers )
 
-
-
 add_subdirectory(Windowing)
+add_subdirectory(Engine)
 
-target_compile_definitions(UFox-Windowing PUBLIC
-        UFOX_DEBUG
-)
+
+
+add_definitions(-DUFOX_DEBUG)
 
 set(LIBS)
 list(APPEND LIBS VulkanHppModule SDL3::SDL3 fmt::fmt)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC ${LIBS} UFox-Windowing UFox-Util)
-target_link_libraries(UFox-Windowing PUBLIC  ${LIBS} UFox-Util)
-target_link_libraries(UFox-Util PUBLIC ${LIBS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBS} UFox-Windowing UFox-Graphic-Device UFox-Util)
+target_link_libraries(UFox-Windowing PRIVATE  ${LIBS} UFox-Util)
+target_link_libraries(UFox-Graphic-Device PRIVATE ${LIBS} UFox-Windowing UFox-Util)
+target_link_libraries(UFox-Util PRIVATE ${LIBS})
+
+
 
 
 
