@@ -76,8 +76,8 @@ add_subdirectory(Windowing)
 add_subdirectory(Engine)
 
 
-
-add_definitions(-DUFOX_DEBUG)
+target_compile_definitions(UFox-Windowing PUBLIC "UFOX_DEBUG")
+target_compile_definitions(UFox-Graphic-Device PUBLIC "UFOX_DEBUG")
 
 set(LIBS)
 list(APPEND LIBS VulkanHppModule SDL3::SDL3 fmt::fmt)

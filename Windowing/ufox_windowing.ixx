@@ -16,12 +16,14 @@ import fmt;
 import vulkan_hpp;
 import ufox_utils;
 
-export namespace ufox::windowing {
+export namespace ufox::windowing::SDL {
+
     class SDLException : public std::runtime_error {
     public:
         explicit SDLException(const std::string &msg) : std::runtime_error(msg + ": " + SDL_GetError()) {
         }
     };
+
 
     class UfoxWindow {
         std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> window{nullptr, SDL_DestroyWindow};
@@ -51,6 +53,8 @@ export namespace ufox::windowing {
             if (!rawWindow) {
                 throw SDLException("Failed to create window");
             }
+
+
 
             window.reset(rawWindow);
 
@@ -84,6 +88,16 @@ export namespace ufox::windowing {
 
         [[nodiscard]] PFN_vkGetInstanceProcAddr GetVkGetInstanceProcAddr() const {
             return getInstanceProcAddr;
+        }
+
+        static void GetInstanceExtensions(std::vector<const char*>& extensions) {
+            const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(nullptr);
+            if (!sdlExts) throw SDLException("Failed to get SDL Vulkan extensions");
+
+            for (const char* const* ext = sdlExts; *ext != nullptr; ++ext) {
+                extensions.push_back(*ext);
+                fmt::println("SDL extension: {}", *ext);
+            }
         }
 
         void CreateSurface(const vk::raii::Instance &vkInstance, std::optional<vk::raii::SurfaceKHR> &vkSurface) const {
