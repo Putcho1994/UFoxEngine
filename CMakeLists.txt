@@ -11,32 +11,28 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 
+# Define the helper function with a unique name to avoid conflicts
+function(ufox_add_module_library TARGET_NAME MODULE_FILE)
+    # Create a static library target
+    add_library(${TARGET_NAME} STATIC)
+
+    # Set C++ standard to 23
+    target_compile_features(${TARGET_NAME} PUBLIC cxx_std_23)
+
+    # Make the library's include directories public to dependents
+    target_include_directories(${TARGET_NAME} PUBLIC ${CMAKE_SOURCE_DIR})
+
+    # Specify modules using target_sources with the CXX_MODULES file set
+    target_sources(${TARGET_NAME}
+            PUBLIC FILE_SET CXX_MODULES
+            BASE_DIRS "${CMAKE_SOURCE_DIR}"
+            FILES "${MODULE_FILE}"
+    )
+endfunction()
 
 
-add_executable(UFoxEngine)
-target_compile_features(UFoxEngine PUBLIC cxx_std_23
-)
-target_sources(UFoxEngine
-        PRIVATE
-        FILE_SET CXX_MODULES
-        BASE_DIRS ${CMAKE_SOURCE_DIR}
-        FILES main.ixx
-)
 
-add_library(UFox-Util STATIC)
 
-target_compile_features(UFox-Util PUBLIC cxx_std_23
-)
-
-# Make the library's include directories public to dependents
-target_include_directories(UFox-Util PUBLIC ${CMAKE_SOURCE_DIR})
-
-# Specify modules using target_sources with the CXX_MODULES file set
-target_sources(UFox-Util
-        PUBLIC FILE_SET CXX_MODULES
-        BASE_DIRS "${CMAKE_SOURCE_DIR}"
-        FILES "ufox_utils.ixx"
-)
 
 
 # CPM setup
@@ -62,15 +58,31 @@ target_sources(VulkanHppModule
 target_compile_definitions(VulkanHppModule PUBLIC
         # Your options here, project-dependent:
         # https://github.com/KhronosGroup/Vulkan-Hpp#configuration-options
+
         "VULKAN_HPP_NO_SMART_HANDLE=ON"
         "VULKAN_HPP_NO_EXCEPTIONS=ON"
         "VULKAN_HPP_NO_CONSTRUCTORS=ON"
-        "VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=OFF"
+        "VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1"
+        "VULKAN_HPP_RAII_NO_EXCEPTIONS=0"
+        "VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=0"
 
 )
 
 target_compile_features(VulkanHppModule PUBLIC cxx_std_23)
 target_link_libraries(VulkanHppModule PUBLIC Vulkan-Headers )
+
+add_executable(UFoxEngine main.ixx)
+
+target_compile_features(UFoxEngine PUBLIC cxx_std_23
+)
+target_sources(UFoxEngine
+        PRIVATE
+        FILE_SET CXX_MODULES
+        BASE_DIRS ${CMAKE_SOURCE_DIR}
+        FILES main.ixx
+)
+
+ufox_add_module_library(UFox-Util "ufox_utils.ixx")
 
 add_subdirectory(Windowing)
 add_subdirectory(Engine)

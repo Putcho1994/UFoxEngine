@@ -5,7 +5,6 @@ module;
 
 #include <SDL3/SDL.h> // Include SDL's traditional header
 
-#include "cmake-build-mingw64-clang-default/_deps/sdl3-src/src/video/khronos/vulkan/vulkan_core.h"
 
 
 import vulkan_hpp;
@@ -24,7 +23,7 @@ export int main() {
     window.Init("UFox Engine", SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN |SDL_WINDOW_MAXIMIZED);
 
     ufox::graphic_device::vulkan::UfoxGraphicDevice graphicDevice(window);
-    graphicDevice.Init("UFox Engine", "UFox Engine", vk::makeApiVersion(1,0,0,0), VK_API_VERSION_1_3);
+    graphicDevice.Init("UFox Engine", "UFox Engine", vk::makeApiVersion(1,0,0,0));
 
     bool mainWinIsShow = window.ShowWindow();
 
