@@ -6,7 +6,6 @@
 
 
 namespace ufox::graphics::vulkan {
-
     bool AreExtensionsSupported( const std::vector<const char *> &required, const std::vector<vk::ExtensionProperties> &available) {
         for (const auto* req : required) {
             bool found = false;
@@ -24,8 +23,7 @@ namespace ufox::graphics::vulkan {
         return true;
     }
 
-    GraphicsDevice::GraphicsDevice(const windowing::sdl::UfoxWindow& window, const char* engineName, uint32_t engineVersion, const char* appName, uint32_t appVersion){
-
+    GraphicsDevice::GraphicsDevice(const windowing::sdl::UfoxWindow& window, const char* engineName, uint32_t engineVersion, const char* appName, uint32_t appVersion) {
 #pragma region Create Context
         auto vkGetInstanceProcAddr{reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())};
         context.emplace(vkGetInstanceProcAddr);
@@ -73,13 +71,36 @@ namespace ufox::graphics::vulkan {
 
 #pragma region Create Surface
         VkSurfaceKHR raw_surface;
-          if (!SDL_Vulkan_CreateSurface(window.get(),**instance, nullptr, &raw_surface)) {
-              throw windowing::sdl::SDLException("Failed to create surface");
-          }
+        if (!SDL_Vulkan_CreateSurface(window.get(),**instance, nullptr, &raw_surface)) {
+            throw windowing::sdl::SDLException("Failed to create surface");
+        }
 
         surface.emplace(*instance,raw_surface);
 #pragma endregion
 
+#pragma region Select Physical Device
+        auto devices = instance->enumeratePhysicalDevices();
+        for (const auto& device : devices) {
+            QueueFamilyIndices indices;
+            auto families = device.getQueueFamilyProperties();
+            for (uint32_t i = 0; i < families.size(); ++i) {
+                if (families[i].queueFlags & vk::QueueFlagBits::eGraphics) indices.graphics = i;
+                if (device.getSurfaceSupportKHR(i, *surface)) indices.present = i;
+                if (indices.graphics && indices.present) break;
+            }
+            if (indices.graphics && indices.present) {
+                physicalDevice = device;
+                queueFamilyIndices = indices;
+                break;
+            }
+        }
+        if (!physicalDevice) throw std::runtime_error("No suitable physical device found");
+
+#pragma endregion
+
+#pragma region Create Device
+
+#pragma endregion
     }
 
 }

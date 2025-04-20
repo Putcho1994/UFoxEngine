@@ -16,6 +16,12 @@
 
 namespace ufox::graphics::vulkan {
 
+    struct QueueFamilyIndices
+    {
+        std::optional<uint32_t> graphics;
+        std::optional<uint32_t> present;
+    };
+
     static bool AreExtensionsSupported(const std::vector<const char*>& required, const std::vector<vk::ExtensionProperties>& available);
 
     class GraphicsDevice {
@@ -38,7 +44,10 @@ namespace ufox::graphics::vulkan {
         std::optional<vk::raii::Context> context{};
         std::optional<vk::raii::Instance> instance{};
         std::optional<vk::raii::SurfaceKHR> surface{};
+        std::optional <vk::raii::PhysicalDevice> physicalDevice{};
+        std::optional <vk::raii::Device> device{};
 
+        QueueFamilyIndices queueFamilyIndices{ std::nullopt, std::nullopt };
     };
 
 }
