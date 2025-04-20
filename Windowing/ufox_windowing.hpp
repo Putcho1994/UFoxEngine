@@ -29,12 +29,14 @@ namespace ufox::windowing::sdl {
         UfoxWindow& operator=(UfoxWindow&&) = default;
 
         [[nodiscard]] SDL_Window* get() const;
+        [[nodiscard]] std::pair<uint32_t, uint32_t> getSize() const{return _size;}
+
         void show() const;
         void hide() const;
-
-
+        void updateSize();
 
     private:
         std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> _window;
+        std::pair<uint32_t, uint32_t> _size;
     };
 }

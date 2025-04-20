@@ -31,6 +31,8 @@ namespace ufox::windowing::sdl
         if (flags & SDL_WINDOW_VULKAN) {
             if (!SDL_Vulkan_LoadLibrary(nullptr)) throw SDLException("Failed to load Vulkan library");
         }
+
+        updateSize();
     }
 
     SDL_Window* UfoxWindow::get() const {
@@ -43,5 +45,11 @@ namespace ufox::windowing::sdl
 
     void UfoxWindow::hide() const {
         SDL_HideWindow(_window.get());
+    }
+
+    void UfoxWindow::updateSize(){
+        int w, h;
+        SDL_GetWindowSizeInPixels(_window.get(), &w, &h);
+        _size = std::make_pair(static_cast<uint32_t>(w),static_cast<uint32_t>(h));
     }
 }

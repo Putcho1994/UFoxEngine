@@ -4,13 +4,14 @@
 
 #pragma once
 
-#include <vulkan/vulkan_raii.hpp>
 #include <optional>
+#include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <stdexcept>
-#include <SDL3/SDL_vulkan.h>
 #include <fmt/base.h>
+#include <SDL3/SDL_vulkan.h>
+#include <vulkan/vulkan_raii.hpp>
 
 #include "Windowing/ufox_windowing.hpp"
 
@@ -37,7 +38,11 @@ namespace ufox::graphics::vulkan {
         GraphicsDevice(GraphicsDevice&&) = delete;
         GraphicsDevice& operator=(GraphicsDevice&&) = delete;
 
+        void createSwapChain(const windowing::sdl::UfoxWindow& window);
+        void recreateSwapchain();
+        void clearSwapchain();
 
+        bool useVsync{true};
 
     private:
         // RAII Vulkan context
@@ -46,8 +51,16 @@ namespace ufox::graphics::vulkan {
         std::optional<vk::raii::SurfaceKHR> surface{};
         std::optional <vk::raii::PhysicalDevice> physicalDevice{};
         std::optional <vk::raii::Device> device{};
-
         QueueFamilyIndices queueFamilyIndices{ std::nullopt, std::nullopt };
+        std::optional<vk::raii::Queue> graphicsQueue{};
+        std::optional<vk::raii::Queue> presentQueue{};
+        std::optional<vk::raii::CommandPool> commandPool{};
+        std::optional<vk::raii::SwapchainKHR> swapchain{};
+        std::vector<vk::Image> swapchainImages;
+        std::vector<vk::raii::ImageView> swapchainImageViews;
+        vk::Format swapchainFormat{ vk::Format::eUndefined };
+        vk::PresentModeKHR presentMode{ vk::PresentModeKHR::eFifo};
+        vk::Extent2D swapchainExtent{ 0, 0 };
     };
 
 }
