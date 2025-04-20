@@ -32,6 +32,8 @@ namespace ufox::windowing::sdl {
         void show() const;
         void hide() const;
 
+
+
     private:
         std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)> _window;
     };

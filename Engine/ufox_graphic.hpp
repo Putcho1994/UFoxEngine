@@ -12,13 +12,15 @@
 #include <SDL3/SDL_vulkan.h>
 #include <fmt/base.h>
 
+#include "Windowing/ufox_windowing.hpp"
+
 namespace ufox::graphics::vulkan {
 
     static bool AreExtensionsSupported(const std::vector<const char*>& required, const std::vector<vk::ExtensionProperties>& available);
 
     class GraphicsDevice {
     public:
-        GraphicsDevice(const char* engineName, uint32_t engineVersion, const char* appName, uint32_t appVersion);
+        GraphicsDevice(const windowing::sdl::UfoxWindow& window, const char* engineName, uint32_t engineVersion, const char* appName, uint32_t appVersion);
         ~GraphicsDevice() = default;
 
         // Delete copy constructors
@@ -32,13 +34,10 @@ namespace ufox::graphics::vulkan {
 
 
     private:
-
-        void createInstance();
-
         // RAII Vulkan context
         std::optional<vk::raii::Context> context{};
         std::optional<vk::raii::Instance> instance{};
-
+        std::optional<vk::raii::SurfaceKHR> surface{};
 
     };
 

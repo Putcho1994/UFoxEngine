@@ -6,7 +6,7 @@ int main() {
     try {
         ufox::windowing::sdl::UfoxWindow window("UFoxEngine Test",
             SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-        ufox::graphics::vulkan::GraphicsDevice device(
+        ufox::graphics::vulkan::GraphicsDevice device(window,
             "UFox Engine", vk::makeApiVersion(0, 1, 0,0),
             "UFox Application", vk::makeApiVersion(0,1,0,0));
 

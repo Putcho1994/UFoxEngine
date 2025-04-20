@@ -7,7 +7,7 @@
 
 namespace ufox::graphics::vulkan {
 
-    bool AreExtensionsSupported(const std::vector<const char *> &required, const std::vector<vk::ExtensionProperties> &available) {
+    bool AreExtensionsSupported( const std::vector<const char *> &required, const std::vector<vk::ExtensionProperties> &available) {
         for (const auto* req : required) {
             bool found = false;
             for (const auto& avail : available) {
@@ -24,13 +24,16 @@ namespace ufox::graphics::vulkan {
         return true;
     }
 
-    GraphicsDevice::GraphicsDevice(const char* engineName, uint32_t engineVersion, const char* appName, uint32_t appVersion){
+    GraphicsDevice::GraphicsDevice(const windowing::sdl::UfoxWindow& window, const char* engineName, uint32_t engineVersion, const char* appName, uint32_t appVersion){
 
+#pragma region Create Context
         auto vkGetInstanceProcAddr{reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr())};
         context.emplace(vkGetInstanceProcAddr);
         auto const vulkanVersion {context->enumerateInstanceVersion()};
         fmt::println("Vulkan API version: {}.{}", VK_VERSION_MAJOR(vulkanVersion), VK_VERSION_MINOR(vulkanVersion));
+#pragma endregion
 
+#pragma region Create Instance
         vk::ApplicationInfo appInfo{};
         appInfo.setPApplicationName(appName)
             .setApplicationVersion(appVersion)
@@ -66,12 +69,18 @@ namespace ufox::graphics::vulkan {
             .setPpEnabledExtensionNames(requiredExtensions.data());
 
         instance.emplace(*context, createInfo);
+#pragma endregion
+
+#pragma region Create Surface
+        VkSurfaceKHR raw_surface;
+          if (!SDL_Vulkan_CreateSurface(window.get(),**instance, nullptr, &raw_surface)) {
+              throw windowing::sdl::SDLException("Failed to create surface");
+          }
+
+        surface.emplace(*instance,raw_surface);
+#pragma endregion
 
     }
 
-
-
-    void GraphicsDevice::createInstance() {
-    }
 }
 

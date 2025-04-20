@@ -35,7 +35,7 @@ add_executable(${PROJECT_NAME} main.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBS} UFox-Windowing UFox-Engine)
 target_link_libraries(UFox-Windowing PRIVATE ${LIBS})
-target_link_libraries(UFox-Engine PRIVATE ${LIBS})
+target_link_libraries(UFox-Engine PRIVATE ${LIBS} UFox-Windowing)
 
 
 
