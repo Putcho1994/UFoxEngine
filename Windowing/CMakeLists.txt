@@ -1,3 +1,5 @@
 cmake_minimum_required(VERSION 3.30)
 
-ufox_add_module_library(UFox-Windowing "ufox_windowing.ixx")
+add_library(UFox-Windowing STATIC ufox_windowing.cpp)
+
+target_include_directories(UFox-Windowing PUBLIC ${CMAKE_SOURCE_DIR})
