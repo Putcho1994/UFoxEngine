@@ -5,6 +5,46 @@
 #include "ufox_graphic.hpp"
 
 namespace ufox::graphics::vulkan {
+
+    void TransitionImageLayout(const vk::raii::CommandBuffer& cmd, const vk::Image& image,
+            vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
+            vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess,
+            vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage){
+        vk::ImageMemoryBarrier2 barrier{};
+        barrier.setImage(image)
+            .setOldLayout(oldLayout)
+            .setNewLayout(newLayout)
+            .setSrcStageMask(srcStage)
+            .setDstStageMask(dstStage)
+            .setSrcAccessMask(srcAccess)
+            .setDstAccessMask(dstAccess)
+            .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+            .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+            .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+        vk::DependencyInfo dependency{};
+        dependency.setImageMemoryBarrierCount(1)
+            .setPImageMemoryBarriers(&barrier);
+        cmd.pipelineBarrier2(dependency);
+    }
+
+    std::vector<char> loadShader(const std::string& filename){
+        std::string path = SDL_GetBasePath() + filename;
+        std::ifstream file(path, std::ios::ate | std::ios::binary);
+        if (!file.is_open()) throw std::runtime_error("Failed to open shader: " + path);
+
+        size_t size = file.tellg();
+        if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+            throw std::runtime_error("File size exceeds maximum streamsize limit");
+        }
+
+        std::vector<char> buffer(size);
+        file.seekg(0);
+        file.read(buffer.data(), static_cast<std::streamsize>(size));
+        file.close();
+        return buffer;
+    }
+
     bool AreExtensionsSupported( const std::vector<const char *> &required, const std::vector<vk::ExtensionProperties> &available) {
         for (const auto* req : required) {
             bool found = false;
@@ -132,7 +172,6 @@ namespace ufox::graphics::vulkan {
             presentQueue.emplace(*device, *queueFamilyIndices.present, 0);
         }
 
-
 #pragma endregion
 
 #pragma region Create Command Pool
@@ -142,25 +181,53 @@ namespace ufox::graphics::vulkan {
         commandPool.emplace(*device, poolInfo);
 #pragma endregion
 
-        createSwapChain(window);
+#pragma region Create Command Buffers
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.setCommandPool(*commandPool)
+            .setLevel(vk::CommandBufferLevel::ePrimary)
+            .setCommandBufferCount(MAX_FRAMES_IN_FLIGHT);
+        commandBuffers = device->allocateCommandBuffers(allocInfo);
+#pragma endregion
+
+#pragma region Create Synchronization Objects
+        vk::SemaphoreCreateInfo semaphoreInfo{};
+        vk::FenceCreateInfo fenceInfo{ vk::FenceCreateFlagBits::eSignaled };
+
+        imageAvailableSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
+        renderFinishedSemaphores.reserve(MAX_FRAMES_IN_FLIGHT);
+        inFlightFences.reserve(MAX_FRAMES_IN_FLIGHT);
+
+        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            imageAvailableSemaphores.emplace_back(*device, semaphoreInfo);
+            renderFinishedSemaphores.emplace_back(*device, semaphoreInfo);
+            inFlightFences.emplace_back(*device, fenceInfo);
+        }
+#pragma endregion
+
+        createSwapchain(window);
+        createGraphicsPipeline();
     }
-
-    void GraphicsDevice::createSwapChain(const windowing::sdl::UfoxWindow& window) {
+    void GraphicsDevice::createSwapchain(const windowing::sdl::UfoxWindow& window) {
         vk::SurfaceCapabilitiesKHR capabilities = physicalDevice->getSurfaceCapabilitiesKHR(*surface);
-        auto formats = physicalDevice->getSurfaceFormatsKHR(*surface);
-        auto presentModes = physicalDevice->getSurfacePresentModesKHR(*surface);
 
+#pragma region Get Supported Format
+        auto formats = physicalDevice->getSurfaceFormatsKHR(*surface);
         vk::SurfaceFormatKHR surfaceFormat;
         for (const auto& format : formats) {
             if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
                 surfaceFormat = format;
         }
         swapchainFormat = surfaceFormat.format;
+#pragma endregion
 
+#pragma region Get Supported Present Mode
+        auto presentModes = physicalDevice->getSurfacePresentModesKHR(*surface);
         auto mailboxIt = std::ranges::find_if(presentModes,
     [](const vk::PresentModeKHR& mode) { return mode == vk::PresentModeKHR::eMailbox; });
         presentMode = mailboxIt != presentModes.end() ? *mailboxIt : useVsync ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
+#pragma endregion
 
+#pragma region Get Extent
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
             swapchainExtent = capabilities.currentExtent;
         }
@@ -171,12 +238,22 @@ namespace ufox::graphics::vulkan {
             extent.height = std::clamp(extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
             swapchainExtent = extent;
         }
+#pragma endregion
 
-        uint32_t imageCount = capabilities.minImageCount == 1 ? 2 : capabilities.minImageCount;
+#pragma region Get Count
+        uint32_t imageCount = capabilities.minImageCount < 2 ? 2 : capabilities.minImageCount;
         if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
             imageCount = capabilities.maxImageCount;
         }
+#pragma endregion
 
+#pragma region Get Pre Transform support flag
+        vk::SurfaceTransformFlagBitsKHR preTransform = capabilities.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity
+                                                                   ? vk::SurfaceTransformFlagBitsKHR::eIdentity
+                                                                   : capabilities.currentTransform;
+#pragma endregion
+
+#pragma region Create Swapchain
         vk::SwapchainCreateInfoKHR createInfo{};
         createInfo.setSurface(*surface)
             .setMinImageCount(imageCount)
@@ -185,7 +262,7 @@ namespace ufox::graphics::vulkan {
             .setImageExtent(swapchainExtent)
             .setImageArrayLayers(1)
             .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
-            .setPreTransform(capabilities.currentTransform)
+            .setPreTransform(preTransform)
             .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque)
             .setPresentMode(presentMode)
             .setClipped(true);
@@ -201,7 +278,182 @@ namespace ufox::graphics::vulkan {
         }
 
         swapchain.emplace(*device, createInfo);
+#pragma endregion
+
+#pragma region Create Image View
         swapchainImages = swapchain->getImages();
+        swapchainImageViews.reserve(swapchainImages.size());
+
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.setViewType(vk::ImageViewType::e2D)
+            .setFormat(swapchainFormat)
+            .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+        for (const auto& image : swapchainImages) {
+            viewInfo.setImage(image);
+            swapchainImageViews.emplace_back(*device, viewInfo);
+        }
+#pragma endregion
+    }
+
+    void GraphicsDevice::createGraphicsPipeline() {
+        auto vertCode = loadShader("shaders/shader.vert.spv");
+        auto fragCode = loadShader("shaders/shader.frag.spv");
+        vk::raii::ShaderModule vertModule(*device, vk::ShaderModuleCreateInfo{ {}, vertCode.size(), reinterpret_cast<const uint32_t*>(vertCode.data()) });
+        vk::raii::ShaderModule fragModule(*device, vk::ShaderModuleCreateInfo{ {}, fragCode.size(), reinterpret_cast<const uint32_t*>(fragCode.data()) });
+
+        std::array stages = {
+            vk::PipelineShaderStageCreateInfo{ {}, vk::ShaderStageFlagBits::eVertex, *vertModule, "main" },
+            vk::PipelineShaderStageCreateInfo{ {}, vk::ShaderStageFlagBits::eFragment, *fragModule, "main" }
+        };
+
+        vk::PipelineVertexInputStateCreateInfo vertexInput{};
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList);
+
+        vk::PipelineViewportStateCreateInfo viewportState{};
+        viewportState.setViewportCount(1).setScissorCount(1);
+
+        vk::PipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.setPolygonMode(vk::PolygonMode::eFill).setLineWidth(1.0f);
+
+        vk::PipelineMultisampleStateCreateInfo multisample{};
+        multisample.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+
+        vk::PipelineColorBlendAttachmentState blendAttachment{};
+        blendAttachment.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+
+        vk::PipelineColorBlendStateCreateInfo blendState{};
+        blendState.setAttachmentCount(1).setPAttachments(&blendAttachment);
+
+        std::array dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eCullMode,
+                                     vk::DynamicState::eFrontFace, vk::DynamicState::ePrimitiveTopology };
+        vk::PipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.setDynamicStateCount(dynamicStates.size()).setPDynamicStates(dynamicStates.data());
+
+        pipelineLayout.emplace(*device, vk::PipelineLayoutCreateInfo{});
+
+        vk::PipelineRenderingCreateInfo renderingInfo{};
+        renderingInfo.setColorAttachmentCount(1).setPColorAttachmentFormats(&swapchainFormat);
+
+        vk::GraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.setStageCount(stages.size())
+            .setPStages(stages.data())
+            .setPVertexInputState(&vertexInput)
+            .setPInputAssemblyState(&inputAssembly)
+            .setPViewportState(&viewportState)
+            .setPRasterizationState(&rasterizer)
+            .setPMultisampleState(&multisample)
+            .setPColorBlendState(&blendState)
+            .setPDynamicState(&dynamicState)
+            .setLayout(**pipelineLayout)
+            .setPNext(&renderingInfo);
+
+        graphicsPipeline.emplace(*device, nullptr, pipelineInfo);
+    }
+
+    void GraphicsDevice::recreateSwapchain(const windowing::sdl::UfoxWindow& window) {
+        waitForIdle();
+
+        swapchainImageViews.clear();
+        swapchain.reset();
+        createSwapchain(window);
+    }
+
+    void GraphicsDevice::drawFrame(const windowing::sdl::UfoxWindow& window) {
+        if (!enableRender) return;
+
+        [[maybe_unused]] auto waitResult = device->waitForFences(*inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        auto [result, imageIndex] = swapchain->acquireNextImage(UINT64_MAX, *imageAvailableSemaphores[currentFrame], nullptr);
+        currentImage = imageIndex;
+
+        if (result == vk::Result::eErrorOutOfDateKHR) {
+            recreateSwapchain(window);
+            return;
+        }
+
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+            throw std::runtime_error("Failed to acquire swapchain image");
+        }
+
+        device->resetFences(*inFlightFences[currentFrame]);
+        vk::raii::CommandBuffer& cmd = commandBuffers[currentFrame];
+        cmd.reset();
+
+        vk::CommandBufferBeginInfo beginInfo{ vk::CommandBufferUsageFlagBits::eOneTimeSubmit };
+        cmd.begin(beginInfo);
+
+        TransitionImageLayout(cmd, swapchainImages[imageIndex],
+            vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+            vk::AccessFlagBits2::eNone, vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+
+        vk::RenderingAttachmentInfo colorAttachment{};
+        colorAttachment.setImageView(*swapchainImageViews[imageIndex])
+            .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+            .setLoadOp(vk::AttachmentLoadOp::eClear)
+            .setStoreOp(vk::AttachmentStoreOp::eStore)
+            .setClearValue({ std::array{0.2f, 0.2f, 0.2f, 1.0f} });
+
+        vk::RenderingInfo renderingInfo{};
+        renderingInfo.setRenderArea({ {0, 0}, swapchainExtent })
+            .setLayerCount(1)
+            .setColorAttachmentCount(1)
+            .setPColorAttachments(&colorAttachment);
+
+        cmd.beginRendering(renderingInfo);
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+        cmd.setViewport(0, vk::Viewport{ 0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f });
+        cmd.setScissor(0, vk::Rect2D{ {0, 0}, swapchainExtent });
+        cmd.setCullMode(vk::CullModeFlagBits::eNone);
+        cmd.setFrontFace(vk::FrontFace::eCounterClockwise);
+        cmd.setPrimitiveTopology(vk::PrimitiveTopology::eTriangleList);
+        cmd.draw(3, 1, 0, 0);
+        cmd.endRendering();
+
+        TransitionImageLayout(cmd, swapchainImages[imageIndex],
+            vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
+            vk::AccessFlagBits2::eColorAttachmentWrite, vk::AccessFlagBits2::eNone,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
+
+        cmd.end();
+
+        vk::SubmitInfo submitInfo{};
+        vk::PipelineStageFlags waitStage{ vk::PipelineStageFlagBits::eTopOfPipe }; // Fixed from TopOfPipe
+        submitInfo.setWaitSemaphoreCount(1)
+            .setPWaitSemaphores(&(*imageAvailableSemaphores[currentFrame]))
+            .setPWaitDstStageMask(&waitStage)
+            .setCommandBufferCount(1)
+            .setPCommandBuffers(&(*cmd))
+            .setSignalSemaphoreCount(1)
+            .setPSignalSemaphores(&(*renderFinishedSemaphores[currentFrame]));
+
+        graphicsQueue->submit(submitInfo, *inFlightFences[currentFrame]);
+
+        vk::PresentInfoKHR presentInfo{};
+        presentInfo.setWaitSemaphoreCount(1)
+            .setPWaitSemaphores(&*renderFinishedSemaphores[currentFrame])
+            .setSwapchainCount(1)
+            .setPSwapchains(&**swapchain)
+            .setPImageIndices(&imageIndex);
+
+        vk::Result presentResult = presentQueue->presentKHR(presentInfo);
+        if (presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR) {
+            recreateSwapchain(window);
+        }
+        else if (presentResult != vk::Result::eSuccess) {
+            throw std::runtime_error("Failed to present swapchain image");
+        }
+
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void GraphicsDevice::waitForIdle() const {
+        if (!device) return;
+        device->waitIdle();
     }
 }
 
