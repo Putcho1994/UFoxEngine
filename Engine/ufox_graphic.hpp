@@ -9,15 +9,38 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <array>
 #include <fmt/base.h>
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan_raii.hpp>
 #include <fstream>
+#include <glm/glm.hpp>
 #include "Windowing/ufox_windowing.hpp"
+
+namespace ufox::graphics::geometry {
+
+    struct Vertex {
+        glm::vec2 pos;
+        glm::vec3 color;
+
+        static vk::VertexInputBindingDescription getBindingDescription();
+
+        static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions();
+    };
+
+    static  std::vector<Vertex> Triangle = {
+        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    };
+}
 
 namespace ufox::graphics::vulkan {
 
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+    static uint32_t FindMemoryType( vk::PhysicalDeviceMemoryProperties const & memoryProperties, uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask );
+
 
     static void TransitionImageLayout(const vk::raii::CommandBuffer& cmd, const vk::Image& image,
             vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
@@ -53,7 +76,8 @@ namespace ufox::graphics::vulkan {
         void recreateSwapchain(const windowing::sdl::UfoxWindow& window);
         void drawFrame(const windowing::sdl::UfoxWindow& window);
         void waitForIdle() const;
-
+        void createVertexBuffer();
+        void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, std::optional<vk::raii::Buffer>& buffer, std::optional<vk::raii::DeviceMemory>& bufferMemory);
 
     private:
         //Instance properties
@@ -85,8 +109,18 @@ namespace ufox::graphics::vulkan {
         uint32_t currentFrame{ 0 };
         uint32_t currentImage{ 0 };
 
+        std::vector<geometry::Vertex> triangle = {
+            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+        };
+        std::optional<vk::raii::Buffer> vertexBuffer{};
+        std::optional<vk::raii::DeviceMemory> vertexBufferMemory{};
+
         void createSwapchain(const windowing::sdl::UfoxWindow& window);
         void createGraphicsPipeline();
     };
 
 }
+
+

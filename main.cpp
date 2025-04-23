@@ -46,7 +46,7 @@ int main() {
                 }
             }
 
-            gpu.drawFrame(window);
+            //gpu.drawFrame(window);
         }
 
         gpu.waitForIdle();
