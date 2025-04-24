@@ -330,7 +330,7 @@ namespace ufox::graphics::vulkan {
 
         vk::VertexInputBindingDescription bindingDescription{};
         bindingDescription.setBinding(0)
-                          .setStride(sizeof(geometry::VertexPC))
+                          .setStride(sizeof(geometry::Vertex))
                           .setInputRate(vk::VertexInputRate::eVertex);
 
         std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
@@ -342,7 +342,7 @@ namespace ufox::graphics::vulkan {
         attributeDescriptions[1].setBinding(0)
                                 .setLocation(1)
                                 .setFormat(vk::Format::eR32G32B32Sfloat)
-                                .setOffset(offsetof(geometry::VertexPC, r));
+                                .setOffset(offsetof(geometry::Vertex, color));
 
         vertexInput.setVertexBindingDescriptionCount(1)
                    .setVertexAttributeDescriptionCount( attributeDescriptions.size())
@@ -516,7 +516,7 @@ namespace ufox::graphics::vulkan {
     }
 
     void GraphicsDevice::createVertexBuffer() {
-        vk::DeviceSize bufferSize = sizeof(geometry::triangle);
+        vk::DeviceSize bufferSize = sizeof(geometry::TestRect);
 
         std::optional<vk::raii::Buffer> stagingBuffer{};
         std::optional<vk::raii::DeviceMemory> stagingBufferMemory;
@@ -525,7 +525,7 @@ namespace ufox::graphics::vulkan {
 
         // copy the vertex and color data into that device memory
         auto * pData = static_cast<uint8_t *>( stagingBufferMemory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, geometry::triangle, bufferSize );
+        memcpy( pData, geometry::TestRect, bufferSize );
         stagingBufferMemory->unmapMemory();
 
         createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eVertexBuffer,
@@ -567,7 +567,7 @@ namespace ufox::graphics::vulkan {
 
         // copy the vertex and color data into that device memory
         auto * pData = static_cast<uint8_t *>( stagingBufferMemory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, indices.data(), sizeof( indices ) );
+        memcpy( pData, indices.data(), bufferSize );
         stagingBufferMemory->unmapMemory();
 
         createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eIndexBuffer,

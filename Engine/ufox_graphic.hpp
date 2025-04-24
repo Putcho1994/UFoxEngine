@@ -17,21 +17,21 @@
 #include <glm/glm.hpp>
 #include "Windowing/ufox_windowing.hpp"
 
+#include "ufox_numerics.hpp"
+
 namespace ufox::graphics::geometry {
 
-    struct VertexPC
-    {
-        float x, y;   // Position
-        float r, g, b;   // Color
+    struct Vertex {
+        numerics::Vector3 position;
+        numerics::Vector4 color;
     };
 
-    static  const VertexPC triangle[] = {
+    static const Vertex TestRect[] = {
         {-0.5f, -0.5f, 1.0f, 0.0f, 0.0f},
         {0.5f, -0.5f, 0.0f, 1.0f, 0.0f},
         {0.5f, 0.5f, 0.0f, 0.0f, 1.0f},
         {-0.5f, 0.5f, 1.0f, 1.0f, 1.0f}
     };
-
 }
 
 namespace ufox::graphics::vulkan {
