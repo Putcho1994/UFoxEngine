@@ -19,20 +19,19 @@
 
 namespace ufox::graphics::geometry {
 
-    struct Vertex {
-        glm::vec2 pos;
-        glm::vec3 color;
-
-        static vk::VertexInputBindingDescription getBindingDescription();
-
-        static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions();
+    struct VertexPC
+    {
+        float x, y;   // Position
+        float r, g, b;   // Color
     };
 
-    static  std::vector<Vertex> Triangle = {
-        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    static  const VertexPC triangle[] = {
+        {-0.5f, -0.5f, 1.0f, 0.0f, 0.0f},
+        {0.5f, -0.5f, 0.0f, 1.0f, 0.0f},
+        {0.5f, 0.5f, 0.0f, 0.0f, 1.0f},
+        {-0.5f, 0.5f, 1.0f, 1.0f, 1.0f}
     };
+
 }
 
 namespace ufox::graphics::vulkan {
@@ -76,7 +75,7 @@ namespace ufox::graphics::vulkan {
         void recreateSwapchain(const windowing::sdl::UfoxWindow& window);
         void drawFrame(const windowing::sdl::UfoxWindow& window);
         void waitForIdle() const;
-        void createVertexBuffer();
+
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, std::optional<vk::raii::Buffer>& buffer, std::optional<vk::raii::DeviceMemory>& bufferMemory);
 
     private:
@@ -109,16 +108,22 @@ namespace ufox::graphics::vulkan {
         uint32_t currentFrame{ 0 };
         uint32_t currentImage{ 0 };
 
-        std::vector<geometry::Vertex> triangle = {
-            {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+
+
+        const std::vector<uint32_t> indices = {
+            0, 1, 2, 2, 3, 0
         };
+
         std::optional<vk::raii::Buffer> vertexBuffer{};
         std::optional<vk::raii::DeviceMemory> vertexBufferMemory{};
 
+        std::optional<vk::raii::Buffer> indexBuffer{};
+        std::optional<vk::raii::DeviceMemory>indexBufferMemory{};
+
         void createSwapchain(const windowing::sdl::UfoxWindow& window);
         void createGraphicsPipeline();
+        void createVertexBuffer();
+        void createIndexBuffer();
     };
 
 }

@@ -223,6 +223,7 @@ namespace ufox::graphics::vulkan {
         createSwapchain(window);
         createGraphicsPipeline();
         createVertexBuffer();
+        createIndexBuffer();
     }
 
     void GraphicsDevice::createSwapchain(const windowing::sdl::UfoxWindow& window) {
@@ -329,19 +330,19 @@ namespace ufox::graphics::vulkan {
 
         vk::VertexInputBindingDescription bindingDescription{};
         bindingDescription.setBinding(0)
-                          .setStride(sizeof(geometry::Vertex))
+                          .setStride(sizeof(geometry::VertexPC))
                           .setInputRate(vk::VertexInputRate::eVertex);
 
         std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
         attributeDescriptions[0].setBinding(0)
                                 .setLocation(0)
                                 .setFormat(vk::Format::eR32G32Sfloat)
-                                .setOffset(offsetof(geometry::Vertex, pos));
+                                .setOffset(0);
 
         attributeDescriptions[1].setBinding(0)
                                 .setLocation(1)
                                 .setFormat(vk::Format::eR32G32B32Sfloat)
-                                .setOffset(offsetof(geometry::Vertex, color));
+                                .setOffset(offsetof(geometry::VertexPC, r));
 
         vertexInput.setVertexBindingDescriptionCount(1)
                    .setVertexAttributeDescriptionCount( attributeDescriptions.size())
@@ -455,13 +456,21 @@ namespace ufox::graphics::vulkan {
         cmd.beginRendering(renderingInfo);
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+
+
+
         cmd.setViewport(0, vk::Viewport{ 0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f });
         cmd.setScissor(0, vk::Rect2D{ {0, 0}, swapchainExtent });
         cmd.setCullMode(vk::CullModeFlagBits::eNone);
         cmd.setFrontFace(vk::FrontFace::eClockwise);
         cmd.setPrimitiveTopology(vk::PrimitiveTopology::eTriangleList);
-        cmd.bindVertexBuffers( 0, { *vertexBuffer }, { 0 } );
-        cmd.draw(static_cast<uint32_t>(triangle.size()), 1, 0 ,0);
+        vk::Buffer vertexBuffers[] = {*vertexBuffer};
+        vk::DeviceSize offsets[] = {0};
+
+        cmd.bindVertexBuffers( 0, vertexBuffers, offsets );
+        cmd.bindIndexBuffer( *indexBuffer, 0, vk::IndexType::eUint32 );
+        cmd.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
         cmd.endRendering();
 
         TransitionImageLayout(cmd, swapchainImages[imageIndex],
@@ -507,7 +516,7 @@ namespace ufox::graphics::vulkan {
     }
 
     void GraphicsDevice::createVertexBuffer() {
-        vk::DeviceSize bufferSize = sizeof(triangle[0]) * triangle.size();
+        vk::DeviceSize bufferSize = sizeof(geometry::triangle);
 
         std::optional<vk::raii::Buffer> stagingBuffer{};
         std::optional<vk::raii::DeviceMemory> stagingBufferMemory;
@@ -516,7 +525,7 @@ namespace ufox::graphics::vulkan {
 
         // copy the vertex and color data into that device memory
         auto * pData = static_cast<uint8_t *>( stagingBufferMemory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, triangle.data(), sizeof( triangle ) );
+        memcpy( pData, geometry::triangle, bufferSize );
         stagingBufferMemory->unmapMemory();
 
         createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eVertexBuffer,
@@ -548,8 +557,50 @@ namespace ufox::graphics::vulkan {
         graphicsQueue->waitIdle();
     }
 
+    void GraphicsDevice::createIndexBuffer() {
+        vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+        std::optional<vk::raii::Buffer> stagingBuffer{};
+        std::optional<vk::raii::DeviceMemory> stagingBufferMemory;
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+        // copy the vertex and color data into that device memory
+        auto * pData = static_cast<uint8_t *>( stagingBufferMemory->mapMemory( 0, bufferSize ) );
+        memcpy( pData, indices.data(), sizeof( indices ) );
+        stagingBufferMemory->unmapMemory();
+
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eIndexBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+            indexBuffer, indexBufferMemory);
+
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
+                 .setCommandPool(*commandPool)
+                 .setCommandBufferCount(1);
+
+        std::vector<vk::raii::CommandBuffer> cmd = device->allocateCommandBuffers(allocInfo);
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+        cmd.front().begin(beginInfo);
+        vk::BufferCopy copyRegion{};
+        copyRegion.setSrcOffset(0);
+        copyRegion.setDstOffset(0);
+        copyRegion.setSize(bufferSize);
+        cmd.front().copyBuffer(*stagingBuffer, *indexBuffer, { copyRegion });
+        cmd.front().end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.setCommandBufferCount(1)
+                 .setPCommandBuffers(&*cmd.front());
+
+        graphicsQueue->submit(submitInfo, nullptr);
+        graphicsQueue->waitIdle();
+    }
+
     void GraphicsDevice::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
-        vk::MemoryPropertyFlags properties, std::optional<vk::raii::Buffer> &buffer, std::optional<vk::raii::DeviceMemory> &bufferMemory) {
+                                      vk::MemoryPropertyFlags properties, std::optional<vk::raii::Buffer> &buffer, std::optional<vk::raii::DeviceMemory> &bufferMemory) {
 
         vk::BufferCreateInfo bufferInfo{};
         bufferInfo.setSize(size)
@@ -569,28 +620,3 @@ namespace ufox::graphics::vulkan {
     }
 }
 
-namespace ufox::graphics::geometry {
-    vk::VertexInputBindingDescription Vertex::getBindingDescription() {
-        vk::VertexInputBindingDescription bindingDescription{};
-        bindingDescription.setBinding(0)
-                          .setStride(sizeof(Vertex))
-                          .setInputRate(vk::VertexInputRate::eVertex);
-
-        return bindingDescription;
-    }
-
-    std::array<vk::VertexInputAttributeDescription, 2> Vertex::getAttributeDescriptions()  {
-        std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
-        attributeDescriptions[0].setBinding(0)
-                                .setLocation(0)
-                                .setFormat(vk::Format::eR32G32Sfloat)
-                                .setOffset(offsetof(Vertex, pos));
-
-        attributeDescriptions[1].setBinding(0)
-                                .setLocation(1)
-                                .setFormat(vk::Format::eR32G32B32Sfloat)
-                                .setOffset(offsetof(Vertex, color));
-
-        return attributeDescriptions;
-    }
-}
