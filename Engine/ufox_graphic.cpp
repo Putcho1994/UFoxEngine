@@ -469,7 +469,7 @@ namespace ufox::graphics::vulkan {
 
         cmd.bindVertexBuffers( 0, vertexBuffers, offsets );
         cmd.bindIndexBuffer( *indexBuffer, 0, vk::IndexType::eUint32 );
-        cmd.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+        cmd.drawIndexed(static_cast<uint32_t>(std::size(indices)), 1, 0, 0, 0);
 
         cmd.endRendering();
 
@@ -558,7 +558,7 @@ namespace ufox::graphics::vulkan {
     }
 
     void GraphicsDevice::createIndexBuffer() {
-        vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+        vk::DeviceSize bufferSize = sizeof(indices);
 
         std::optional<vk::raii::Buffer> stagingBuffer{};
         std::optional<vk::raii::DeviceMemory> stagingBufferMemory;
@@ -567,7 +567,7 @@ namespace ufox::graphics::vulkan {
 
         // copy the vertex and color data into that device memory
         auto * pData = static_cast<uint8_t *>( stagingBufferMemory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, indices.data(), bufferSize );
+        memcpy( pData, indices, bufferSize );
         stagingBufferMemory->unmapMemory();
 
         createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eIndexBuffer,

@@ -110,7 +110,7 @@ namespace ufox::graphics::vulkan {
 
 
 
-        const std::vector<uint32_t> indices = {
+        const uint32_t indices[6] {
             0, 1, 2, 2, 3, 0
         };
 
