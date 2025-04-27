@@ -4,11 +4,14 @@
 
 #include "ufox_graphic.hpp"
 
+
+#include "glm/gtc/type_ptr.hpp"
+
 namespace ufox::graphics::vulkan {
 
     uint32_t FindMemoryType(vk::PhysicalDeviceMemoryProperties const &memoryProperties, uint32_t typeBits,
         vk::MemoryPropertyFlags requirementsMask){
-        uint32_t typeIndex = static_cast<uint32_t>(~0);
+        auto typeIndex = static_cast<uint32_t>(~0);
         for ( uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++ )
         {
             if ( typeBits & 1 && ( memoryProperties.memoryTypes[i].propertyFlags & requirementsMask ) == requirementsMask )
@@ -92,7 +95,7 @@ namespace ufox::graphics::vulkan {
             .setApplicationVersion(appVersion)
             .setPEngineName(engineName)
             .setEngineVersion(engineVersion)
-            .setApiVersion(vulkanVersion);
+            .setApiVersion(VK_API_VERSION_1_4);
 
         std::vector<vk::ExtensionProperties> availableInstanceExtensions = context->enumerateInstanceExtensionProperties();
         std::vector<const char*> requiredInstanceExtensions{};
@@ -221,9 +224,18 @@ namespace ufox::graphics::vulkan {
 #pragma endregion
 
         createSwapchain(window);
+        createDescriptorSetLayout();
         createGraphicsPipeline();
         createVertexBuffer();
         createIndexBuffer();
+        createUniformBuffers();
+        createDescriptorPool();
+        createDescriptorSets();
+    }
+
+    void GraphicsDevice::waitForIdle() const {
+        if (!device) return;
+        device->waitIdle();
     }
 
     void GraphicsDevice::createSwapchain(const windowing::sdl::UfoxWindow& window) {
@@ -315,6 +327,21 @@ namespace ufox::graphics::vulkan {
 #pragma endregion
     }
 
+    void GraphicsDevice::createDescriptorSetLayout() {
+        vk::DescriptorSetLayoutBinding binding{};
+        binding.setBinding(0)
+            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setStageFlags(vk::ShaderStageFlagBits::eVertex)
+            .setPImmutableSamplers(nullptr);
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.setBindingCount(1)
+            .setPBindings(&binding);
+
+        descriptorSetLayout.emplace(*device, layoutInfo);
+    }
+
     void GraphicsDevice::createGraphicsPipeline() {
         auto vertCode = loadShader("shaders/shader.vert.spv");
         auto fragCode = loadShader("shaders/shader.frag.spv");
@@ -330,19 +357,19 @@ namespace ufox::graphics::vulkan {
 
         vk::VertexInputBindingDescription bindingDescription{};
         bindingDescription.setBinding(0)
-                          .setStride(sizeof(geometry::Vertex))
+                          .setStride(sizeof(Vertex))
                           .setInputRate(vk::VertexInputRate::eVertex);
 
         std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
         attributeDescriptions[0].setBinding(0)
                                 .setLocation(0)
-                                .setFormat(vk::Format::eR32G32Sfloat)
+                                .setFormat(vk::Format::eR32G32B32Sfloat)
                                 .setOffset(0);
 
         attributeDescriptions[1].setBinding(0)
                                 .setLocation(1)
-                                .setFormat(vk::Format::eR32G32B32Sfloat)
-                                .setOffset(offsetof(geometry::Vertex, color));
+                                .setFormat(vk::Format::eR32G32B32A32Sfloat)
+                                .setOffset(offsetof(Vertex, color));
 
         vertexInput.setVertexBindingDescriptionCount(1)
                    .setVertexAttributeDescriptionCount( attributeDescriptions.size())
@@ -379,7 +406,12 @@ namespace ufox::graphics::vulkan {
         vk::PipelineDynamicStateCreateInfo dynamicState{};
         dynamicState.setDynamicStateCount(dynamicStates.size()).setPDynamicStates(dynamicStates.data());
 
-        pipelineLayout.emplace(*device, vk::PipelineLayoutCreateInfo{});
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.setSetLayoutCount(1)
+        .setPSetLayouts(&**descriptorSetLayout);
+
+
+        pipelineLayout.emplace(*device, pipelineLayoutInfo);
 
         vk::PipelineRenderingCreateInfo renderingInfo{};
         renderingInfo.setColorAttachmentCount(1).setPColorAttachmentFormats(&swapchainFormat);
@@ -401,6 +433,189 @@ namespace ufox::graphics::vulkan {
 
 
         graphicsPipeline.emplace(*device, nullptr, pipelineInfo);
+    }
+
+
+    void GraphicsDevice::createVertexBuffer() {
+        vk::DeviceSize bufferSize = sizeof(TestRect);
+
+        Buffer stagingBuffer{};
+
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer);
+
+        // copy the vertex and color data into that device memory
+        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, bufferSize ) );
+        memcpy( pData, TestRect, bufferSize );
+        stagingBuffer.memory->unmapMemory();
+
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eVertexBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+            vertexBuffer);
+
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
+                 .setCommandPool(*commandPool)
+                 .setCommandBufferCount(1);
+
+        std::vector<vk::raii::CommandBuffer> cmd = device->allocateCommandBuffers(allocInfo);
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+        cmd.front().begin(beginInfo);
+        vk::BufferCopy copyRegion{};
+        copyRegion.setSrcOffset(0);
+        copyRegion.setDstOffset(0);
+        copyRegion.setSize(bufferSize);
+        cmd.front().copyBuffer(*stagingBuffer.data, *vertexBuffer.data, { copyRegion });
+        cmd.front().end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.setCommandBufferCount(1)
+                 .setPCommandBuffers(&*cmd.front());
+
+        graphicsQueue->submit(submitInfo, nullptr);
+        graphicsQueue->waitIdle();
+    }
+
+    void GraphicsDevice::createIndexBuffer() {
+        vk::DeviceSize bufferSize = sizeof(indices);
+
+        Buffer stagingBuffer{};
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer);
+
+        // copy the vertex and color data into that device memory
+        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, bufferSize ) );
+        memcpy( pData, indices, bufferSize );
+        stagingBuffer.memory->unmapMemory();
+
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eIndexBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+            indexBuffer);
+
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
+                 .setCommandPool(*commandPool)
+                 .setCommandBufferCount(1);
+
+        std::vector<vk::raii::CommandBuffer> cmd = device->allocateCommandBuffers(allocInfo);
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+        cmd.front().begin(beginInfo);
+        vk::BufferCopy copyRegion{};
+        copyRegion.setSrcOffset(0);
+        copyRegion.setDstOffset(0);
+        copyRegion.setSize(bufferSize);
+        cmd.front().copyBuffer(*stagingBuffer.data, *indexBuffer.data, { copyRegion });
+        cmd.front().end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.setCommandBufferCount(1)
+                 .setPCommandBuffers(&*cmd.front());
+
+        graphicsQueue->submit(submitInfo, nullptr);
+        graphicsQueue->waitIdle();
+    }
+
+    void GraphicsDevice::createUniformBuffers() {
+        vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+
+        uniformBuffers.reserve(MAX_FRAMES_IN_FLIGHT); // Create elements
+        uniformBuffersMapped.reserve(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            Buffer buffer{};
+
+            createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                buffer);
+
+            if (!buffer.memory) {
+                throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
+            }
+            auto mapped = static_cast<uint8_t *>(buffer.memory->mapMemory(0, bufferSize));
+            uniformBuffers.emplace_back(std::move(buffer));
+            uniformBuffersMapped.emplace_back(mapped);
+        }
+    }
+
+    void GraphicsDevice::updateUniformBuffer(uint32_t currentImage) const {
+        static auto startTime = std::chrono::high_resolution_clock::now();
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float>(currentTime - startTime).count();
+
+        UniformBufferObject ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapchainExtent.width) / static_cast<float>(swapchainExtent.height), 0.1f, 10.0f);
+        ubo.proj[1][1] *= -1;
+
+        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+    }
+
+    void GraphicsDevice::createDescriptorPool() {
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.setType(vk::DescriptorType::eUniformBuffer)
+                .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.setPoolSizeCount(1)
+                .setPPoolSizes(&poolSize)
+                .setMaxSets(MAX_FRAMES_IN_FLIGHT)
+                .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
+
+        descriptorPool.emplace(*device, poolInfo);
+    }
+
+    void GraphicsDevice::createDescriptorSets() {
+        std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
+        vk::DescriptorSetAllocateInfo allocInfo{};
+        allocInfo.setDescriptorPool(*descriptorPool)
+                 .setDescriptorSetCount(MAX_FRAMES_IN_FLIGHT)
+                 .setPSetLayouts(layouts.data());
+
+        descriptorSets.reserve(MAX_FRAMES_IN_FLIGHT);
+        descriptorSets = device->allocateDescriptorSets(allocInfo);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vk::DescriptorBufferInfo bufferInfo{};
+            bufferInfo.setBuffer(*uniformBuffers[i].data)
+                      .setOffset(0)
+                      .setRange(sizeof(UniformBufferObject));
+
+            vk::WriteDescriptorSet write{};
+            write.setDstSet(*descriptorSets[i])
+                 .setDstBinding(0)
+                 .setDstArrayElement(0)
+                 .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                 .setDescriptorCount(1)
+                 .setPBufferInfo(&bufferInfo);
+
+            device->updateDescriptorSets(write, nullptr);
+        }
+    }
+
+    void GraphicsDevice::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
+                                      vk::MemoryPropertyFlags properties, Buffer &buffer) {
+
+        vk::BufferCreateInfo bufferInfo{};
+        bufferInfo.setSize(size)
+                  .setUsage(usage)
+                  .setSharingMode(vk::SharingMode::eExclusive);
+
+        buffer.data.emplace(*device, bufferInfo);
+
+        vk::MemoryRequirements memoryRequirements = buffer.data->getMemoryRequirements();
+        uint32_t               memoryTypeIndex    = FindMemoryType( physicalDevice->getMemoryProperties(),
+                                                           memoryRequirements.memoryTypeBits,
+                                                           properties );
+        vk::MemoryAllocateInfo memoryAllocateInfo( memoryRequirements.size, memoryTypeIndex );
+        buffer.memory.emplace(*device, memoryAllocateInfo);
+
+        buffer.data->bindMemory( *buffer.memory, 0 );
     }
 
     void GraphicsDevice::recreateSwapchain(const windowing::sdl::UfoxWindow& window) {
@@ -457,18 +672,17 @@ namespace ufox::graphics::vulkan {
 
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
 
-
-
         cmd.setViewport(0, vk::Viewport{ 0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f });
         cmd.setScissor(0, vk::Rect2D{ {0, 0}, swapchainExtent });
         cmd.setCullMode(vk::CullModeFlagBits::eNone);
         cmd.setFrontFace(vk::FrontFace::eClockwise);
         cmd.setPrimitiveTopology(vk::PrimitiveTopology::eTriangleList);
-        vk::Buffer vertexBuffers[] = {*vertexBuffer};
+        vk::Buffer vertexBuffers[] = {*vertexBuffer.data};
         vk::DeviceSize offsets[] = {0};
 
         cmd.bindVertexBuffers( 0, vertexBuffers, offsets );
-        cmd.bindIndexBuffer( *indexBuffer, 0, vk::IndexType::eUint32 );
+        cmd.bindIndexBuffer( *indexBuffer.data, 0, vk::IndexType::eUint32 );
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descriptorSets[currentFrame], nullptr);
         cmd.drawIndexed(static_cast<uint32_t>(std::size(indices)), 1, 0, 0, 0);
 
         cmd.endRendering();
@@ -479,6 +693,8 @@ namespace ufox::graphics::vulkan {
             vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
 
         cmd.end();
+
+        updateUniformBuffer(currentFrame);
 
         vk::SubmitInfo submitInfo{};
         vk::PipelineStageFlags waitStage{ vk::PipelineStageFlagBits::eTopOfPipe }; // Fixed from TopOfPipe
@@ -508,115 +724,6 @@ namespace ufox::graphics::vulkan {
         }
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-    }
-
-    void GraphicsDevice::waitForIdle() const {
-        if (!device) return;
-        device->waitIdle();
-    }
-
-    void GraphicsDevice::createVertexBuffer() {
-        vk::DeviceSize bufferSize = sizeof(geometry::TestRect);
-
-        std::optional<vk::raii::Buffer> stagingBuffer{};
-        std::optional<vk::raii::DeviceMemory> stagingBufferMemory;
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-        // copy the vertex and color data into that device memory
-        auto * pData = static_cast<uint8_t *>( stagingBufferMemory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, geometry::TestRect, bufferSize );
-        stagingBufferMemory->unmapMemory();
-
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eVertexBuffer,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-            vertexBuffer, vertexBufferMemory);
-
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
-                 .setCommandPool(*commandPool)
-                 .setCommandBufferCount(1);
-
-        std::vector<vk::raii::CommandBuffer> cmd = device->allocateCommandBuffers(allocInfo);
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-        cmd.front().begin(beginInfo);
-        vk::BufferCopy copyRegion{};
-        copyRegion.setSrcOffset(0);
-        copyRegion.setDstOffset(0);
-        copyRegion.setSize(bufferSize);
-        cmd.front().copyBuffer(*stagingBuffer, *vertexBuffer, { copyRegion });
-        cmd.front().end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.setCommandBufferCount(1)
-                 .setPCommandBuffers(&*cmd.front());
-
-        graphicsQueue->submit(submitInfo, nullptr);
-        graphicsQueue->waitIdle();
-    }
-
-    void GraphicsDevice::createIndexBuffer() {
-        vk::DeviceSize bufferSize = sizeof(indices);
-
-        std::optional<vk::raii::Buffer> stagingBuffer{};
-        std::optional<vk::raii::DeviceMemory> stagingBufferMemory;
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-        // copy the vertex and color data into that device memory
-        auto * pData = static_cast<uint8_t *>( stagingBufferMemory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, indices, bufferSize );
-        stagingBufferMemory->unmapMemory();
-
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eIndexBuffer,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-            indexBuffer, indexBufferMemory);
-
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
-                 .setCommandPool(*commandPool)
-                 .setCommandBufferCount(1);
-
-        std::vector<vk::raii::CommandBuffer> cmd = device->allocateCommandBuffers(allocInfo);
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-        cmd.front().begin(beginInfo);
-        vk::BufferCopy copyRegion{};
-        copyRegion.setSrcOffset(0);
-        copyRegion.setDstOffset(0);
-        copyRegion.setSize(bufferSize);
-        cmd.front().copyBuffer(*stagingBuffer, *indexBuffer, { copyRegion });
-        cmd.front().end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.setCommandBufferCount(1)
-                 .setPCommandBuffers(&*cmd.front());
-
-        graphicsQueue->submit(submitInfo, nullptr);
-        graphicsQueue->waitIdle();
-    }
-
-    void GraphicsDevice::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
-                                      vk::MemoryPropertyFlags properties, std::optional<vk::raii::Buffer> &buffer, std::optional<vk::raii::DeviceMemory> &bufferMemory) {
-
-        vk::BufferCreateInfo bufferInfo{};
-        bufferInfo.setSize(size)
-                  .setUsage(usage)
-                  .setSharingMode(vk::SharingMode::eExclusive);
-
-        buffer.emplace(*device, bufferInfo);
-
-        vk::MemoryRequirements memoryRequirements = buffer->getMemoryRequirements();
-        uint32_t               memoryTypeIndex    = FindMemoryType( physicalDevice->getMemoryProperties(),
-                                                           memoryRequirements.memoryTypeBits,
-                                                           properties );
-        vk::MemoryAllocateInfo memoryAllocateInfo( memoryRequirements.size, memoryTypeIndex );
-        bufferMemory.emplace(*device, memoryAllocateInfo);
-
-        buffer->bindMemory( *bufferMemory, 0 );
     }
 }
 
