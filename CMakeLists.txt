@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.14)
 
 
 set(CMAKE_CXX_STANDARD 23)
@@ -20,13 +20,14 @@ include(${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM.cmake)
 CPMAddPackage(NAME SDL3 GITHUB_REPOSITORY libsdl-org/SDL GIT_TAG release-3.2.10 OPTIONS "SDL_VULKAN ON" "SDL_STATIC OFF")
 CPMAddPackage(NAME fmt GITHUB_REPOSITORY fmtlib/fmt GIT_TAG 11.1.4)
 CPMAddPackage(NAME Vulkan-Headers GITHUB_REPOSITORY KhronosGroup/Vulkan-Headers GIT_TAG v1.4.312)
+CPMAddPackage(NAME glm GITHUB_REPOSITORY g-truc/glm GIT_TAG 1.0.1)
 
 target_compile_definitions(Vulkan-Headers INTERFACE
         "VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=OFF"
 )
 
 set(LIBS)
-list(APPEND LIBS Vulkan-Headers SDL3::SDL3 fmt::fmt)
+list(APPEND LIBS Vulkan-Headers SDL3::SDL3 fmt::fmt glm::glm)
 
 add_subdirectory(Windowing)
 add_subdirectory(Engine)

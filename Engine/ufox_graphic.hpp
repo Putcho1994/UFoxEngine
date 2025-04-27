@@ -9,15 +9,36 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <array>
 #include <fmt/base.h>
 #include <SDL3/SDL_vulkan.h>
 #include <vulkan/vulkan_raii.hpp>
 #include <fstream>
 #include "Windowing/ufox_windowing.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include "ufox_numerics.hpp"
+
+namespace ufox::graphics {
+
+    struct Vertex {
+        glm::vec3 position;
+        glm::vec4 color;
+    };
+
+    static constexpr Vertex TestRect[] = {
+        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f, 1.0f}},
+        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 1.0f}},
+        {{0.5f, 0.5f,0.0f}, {0.0f, 0.0f, 1.0f, 1.0f}},
+        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}
+    };
+}
 
 namespace ufox::graphics::vulkan {
 
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
+    static uint32_t FindMemoryType( vk::PhysicalDeviceMemoryProperties const & memoryProperties, uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask );
 
     static void TransitionImageLayout(const vk::raii::CommandBuffer& cmd, const vk::Image& image,
             vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
@@ -25,6 +46,17 @@ namespace ufox::graphics::vulkan {
             vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage);
 
     static std::vector<char> loadShader(const std::string& filename);
+
+    struct Buffer {
+        std::optional<vk::raii::Buffer> data{};
+        std::optional<vk::raii::DeviceMemory> memory{};
+    };
+
+    struct UniformBufferObject {
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 proj;
+    };
 
     struct QueueFamilyIndices
     {
@@ -54,6 +86,7 @@ namespace ufox::graphics::vulkan {
         void drawFrame(const windowing::sdl::UfoxWindow& window);
         void waitForIdle() const;
 
+        void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, Buffer& buffer);
 
     private:
         //Instance properties
@@ -79,14 +112,37 @@ namespace ufox::graphics::vulkan {
         vk::PresentModeKHR presentMode{ vk::PresentModeKHR::eFifo};
         vk::Extent2D swapchainExtent{ 0, 0 };
 
+        std::optional<vk::raii::DescriptorSetLayout> descriptorSetLayout{};
         std::optional<vk::raii::PipelineLayout> pipelineLayout{};
         std::optional<vk::raii::Pipeline> graphicsPipeline{};
+        std::optional<vk::raii::DescriptorPool> descriptorPool{};
+        std::vector<vk::raii::DescriptorSet> descriptorSets;
 
         uint32_t currentFrame{ 0 };
         uint32_t currentImage{ 0 };
 
+
+
+        const uint32_t indices[6] {
+            0, 1, 2, 2, 3, 0
+        };
+
+        Buffer vertexBuffer{};
+        Buffer indexBuffer{};
+        std::vector<Buffer> uniformBuffers;
+        std::vector<uint8_t *> uniformBuffersMapped;
+
         void createSwapchain(const windowing::sdl::UfoxWindow& window);
+        void createDescriptorSetLayout();
         void createGraphicsPipeline();
+        void createVertexBuffer();
+        void createIndexBuffer();
+        void createUniformBuffers();
+        void updateUniformBuffer(uint32_t currentImage) const;
+        void createDescriptorPool();
+        void createDescriptorSets();
     };
 
 }
+
+

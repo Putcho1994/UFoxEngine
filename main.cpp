@@ -2,6 +2,7 @@
 #include <Windowing/ufox_windowing.hpp>
 #include <Engine/ufox_graphic.hpp>
 
+
 int main() {
     try {
         ufox::windowing::sdl::UfoxWindow window("UFoxEngine Test",
@@ -9,7 +10,6 @@ int main() {
         ufox::graphics::vulkan::GraphicsDevice gpu(window,
             "UFox Engine", vk::makeApiVersion(0, 1, 0,0),
             "UFox Application", vk::makeApiVersion(0,1,0,0));
-
 
         window.show();
 
