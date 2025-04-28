@@ -12,6 +12,7 @@
 #include <array>
 #include <fmt/base.h>
 #include <SDL3/SDL_vulkan.h>
+#include <SDL3_image/SDL_image.h>
 #include <vulkan/vulkan_raii.hpp>
 #include <fstream>
 #include "Windowing/ufox_windowing.hpp"
@@ -46,6 +47,11 @@ namespace ufox::graphics::vulkan {
             vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage);
 
     static std::vector<char> loadShader(const std::string& filename);
+
+    struct Image2D {
+        std::optional<vk::raii::Image> data{};
+        std::optional<vk::raii::DeviceMemory> memory{};
+    };
 
     struct Buffer {
         std::optional<vk::raii::Buffer> data{};
@@ -87,6 +93,13 @@ namespace ufox::graphics::vulkan {
         void waitForIdle() const;
 
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, Buffer& buffer);
+        void createImage(const vk::Extent3D& imageExtent, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage,
+                          vk::MemoryPropertyFlags properties, Image2D& image);
+        void copyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, const vk::DeviceSize& size) const;
+        [[nodiscard]] vk::raii::CommandBuffer beginSingleTimeCommands() const;
+        void endSingleTimeCommands(const vk::raii::CommandBuffer& cmd) const;
+        void transitionImageLayout(const Image2D& image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
+        void copyBufferToImage(const Buffer& buffer, const Image2D& image, const vk::Extent3D& imageExtent) const;
 
     private:
         //Instance properties
@@ -127,6 +140,7 @@ namespace ufox::graphics::vulkan {
             0, 1, 2, 2, 3, 0
         };
 
+        Image2D textureImage{};
         Buffer vertexBuffer{};
         Buffer indexBuffer{};
         std::vector<Buffer> uniformBuffers;
@@ -135,6 +149,7 @@ namespace ufox::graphics::vulkan {
         void createSwapchain(const windowing::sdl::UfoxWindow& window);
         void createDescriptorSetLayout();
         void createGraphicsPipeline();
+        void createTextureImage();
         void createVertexBuffer();
         void createIndexBuffer();
         void createUniformBuffers();

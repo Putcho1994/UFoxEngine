@@ -8,6 +8,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 
+# Add a custom command to create the Contents folder and copy its contents
+add_custom_command(
+        OUTPUT "${CMAKE_SOURCE_DIR}/bin/Contents"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/bin/Contents"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/Contents" "${CMAKE_SOURCE_DIR}/bin/Contents"
+        DEPENDS "${CMAKE_SOURCE_DIR}/Contents"
+        COMMENT "Creating and copying Contents folder to bin/Contents"
+)
+
+# Add a custom target to ensure the copy happens
+add_custom_target(CopyContents ALL DEPENDS "${CMAKE_SOURCE_DIR}/bin/Contents")
+
+
 project(UFoxEngine LANGUAGES CXX)
 
 # CPM setup
@@ -22,12 +35,14 @@ CPMAddPackage(NAME fmt GITHUB_REPOSITORY fmtlib/fmt GIT_TAG 11.1.4)
 CPMAddPackage(NAME Vulkan-Headers GITHUB_REPOSITORY KhronosGroup/Vulkan-Headers GIT_TAG v1.4.312)
 CPMAddPackage(NAME glm GITHUB_REPOSITORY g-truc/glm GIT_TAG 1.0.1)
 
+CPMAddPackage(NAME SDL3_image GITHUB_REPOSITORY libsdl-org/SDL_image GIT_TAG release-3.2.4)
+
 target_compile_definitions(Vulkan-Headers INTERFACE
         "VULKAN_HPP_ENABLE_DYNAMIC_LOADER_TOOL=OFF"
 )
 
 set(LIBS)
-list(APPEND LIBS Vulkan-Headers SDL3::SDL3 fmt::fmt glm::glm)
+list(APPEND LIBS Vulkan-Headers SDL3::SDL3 fmt::fmt glm::glm SDL3_image::SDL3_image)
 
 add_subdirectory(Windowing)
 add_subdirectory(Engine)
@@ -42,16 +57,16 @@ find_program(GLSL_VALIDATOR glslangValidator HINTS /usr/bin /usr/local/bin $ENV{
 
 ## find all the shader files under the shaders folder
 file(GLOB_RECURSE GLSL_SOURCE_FILES
-        "${PROJECT_SOURCE_DIR}/shaders/*.frag"
-        "${PROJECT_SOURCE_DIR}/shaders/*.vert"
-        "${PROJECT_SOURCE_DIR}/shaders/*.comp"
+        "${PROJECT_SOURCE_DIR}/Shaders/*.frag"
+        "${PROJECT_SOURCE_DIR}/Shaders/*.vert"
+        "${PROJECT_SOURCE_DIR}/Shaders/*.comp"
 )
 
 ## iterate each shader
 foreach(GLSL ${GLSL_SOURCE_FILES})
     message(STATUS "BUILDING SHADER")
     get_filename_component(FILE_NAME ${GLSL} NAME)
-    set(SPIRV "${PROJECT_SOURCE_DIR}/bin/shaders/${FILE_NAME}.spv")
+    set(SPIRV "${PROJECT_SOURCE_DIR}/bin/Shaders/${FILE_NAME}.spv")
     message(STATUS ${GLSL})
     ##execute glslang command to compile that specific shader
     add_custom_command(
@@ -68,7 +83,7 @@ add_custom_target(
 )
 
 
-add_dependencies(${PROJECT_NAME} shaders)
+add_dependencies(${PROJECT_NAME} shaders CopyContents)
 
 
 

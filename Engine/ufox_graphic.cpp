@@ -226,6 +226,7 @@ namespace ufox::graphics::vulkan {
         createSwapchain(window);
         createDescriptorSetLayout();
         createGraphicsPipeline();
+        createTextureImage();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -435,12 +436,43 @@ namespace ufox::graphics::vulkan {
         graphicsPipeline.emplace(*device, nullptr, pipelineInfo);
     }
 
+    void GraphicsDevice::createTextureImage() {
+        const std::string filename = "Contents/statue-1275469_1280.jpg";
+        std::string path = SDL_GetBasePath() + filename;
+
+        std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> rawSurface
+        {IMG_Load(path.c_str()), SDL_DestroySurface};
+        if (!rawSurface)
+            throw std::runtime_error(std::string("Failed to load texture: ") + SDL_GetError());
+
+        std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> convSurface
+        {SDL_ConvertSurface(rawSurface.get(), SDL_PIXELFORMAT_RGBA8888), SDL_DestroySurface};
+        if (!convSurface)
+            throw std::runtime_error(std::string("Failed to convert texture: ") + SDL_GetError());
+
+        vk::Extent3D imageExtent{static_cast<uint32_t>(convSurface->w), static_cast<uint32_t>(convSurface->h), 1};
+        vk::DeviceSize imageSize = imageExtent.width * imageExtent.height * 4;
+
+        Buffer stagingBuffer{};
+        createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer);
+
+        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, imageSize ) );
+        memcpy( pData, convSurface->pixels,  imageSize);
+        stagingBuffer.memory->unmapMemory();
+
+        createImage(imageExtent, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
+                    vk::ImageUsageFlagBits::eTransferDst|vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage);
+
+        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+        copyBufferToImage(stagingBuffer, textureImage, imageExtent);
+        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+    }
 
     void GraphicsDevice::createVertexBuffer() {
         vk::DeviceSize bufferSize = sizeof(TestRect);
 
         Buffer stagingBuffer{};
-
         createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer);
 
@@ -453,29 +485,7 @@ namespace ufox::graphics::vulkan {
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
             vertexBuffer);
 
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
-                 .setCommandPool(*commandPool)
-                 .setCommandBufferCount(1);
-
-        std::vector<vk::raii::CommandBuffer> cmd = device->allocateCommandBuffers(allocInfo);
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-        cmd.front().begin(beginInfo);
-        vk::BufferCopy copyRegion{};
-        copyRegion.setSrcOffset(0);
-        copyRegion.setDstOffset(0);
-        copyRegion.setSize(bufferSize);
-        cmd.front().copyBuffer(*stagingBuffer.data, *vertexBuffer.data, { copyRegion });
-        cmd.front().end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.setCommandBufferCount(1)
-                 .setPCommandBuffers(&*cmd.front());
-
-        graphicsQueue->submit(submitInfo, nullptr);
-        graphicsQueue->waitIdle();
+        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
     }
 
     void GraphicsDevice::createIndexBuffer() {
@@ -494,33 +504,11 @@ namespace ufox::graphics::vulkan {
             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
             indexBuffer);
 
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
-                 .setCommandPool(*commandPool)
-                 .setCommandBufferCount(1);
-
-        std::vector<vk::raii::CommandBuffer> cmd = device->allocateCommandBuffers(allocInfo);
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-        cmd.front().begin(beginInfo);
-        vk::BufferCopy copyRegion{};
-        copyRegion.setSrcOffset(0);
-        copyRegion.setDstOffset(0);
-        copyRegion.setSize(bufferSize);
-        cmd.front().copyBuffer(*stagingBuffer.data, *indexBuffer.data, { copyRegion });
-        cmd.front().end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.setCommandBufferCount(1)
-                 .setPCommandBuffers(&*cmd.front());
-
-        graphicsQueue->submit(submitInfo, nullptr);
-        graphicsQueue->waitIdle();
+        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
     }
 
     void GraphicsDevice::createUniformBuffers() {
-        vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+        const vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
 
         uniformBuffers.reserve(MAX_FRAMES_IN_FLIGHT); // Create elements
         uniformBuffersMapped.reserve(MAX_FRAMES_IN_FLIGHT);
@@ -609,13 +597,120 @@ namespace ufox::graphics::vulkan {
         buffer.data.emplace(*device, bufferInfo);
 
         vk::MemoryRequirements memoryRequirements = buffer.data->getMemoryRequirements();
-        uint32_t               memoryTypeIndex    = FindMemoryType( physicalDevice->getMemoryProperties(),
-                                                           memoryRequirements.memoryTypeBits,
-                                                           properties );
-        vk::MemoryAllocateInfo memoryAllocateInfo( memoryRequirements.size, memoryTypeIndex );
+        vk::MemoryAllocateInfo memoryAllocateInfo( memoryRequirements.size, FindMemoryType( physicalDevice->getMemoryProperties(),
+                                                   memoryRequirements.memoryTypeBits, properties ) );
         buffer.memory.emplace(*device, memoryAllocateInfo);
-
         buffer.data->bindMemory( *buffer.memory, 0 );
+    }
+
+    void GraphicsDevice::createImage(const vk::Extent3D& imageExtent, vk::Format format, vk::ImageTiling tiling,
+        vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, Image2D& image) {
+
+        vk::ImageCreateInfo imageInfo{};
+        imageInfo.setImageType(vk::ImageType::e2D)
+                 .setFormat(format)
+                 .setExtent(imageExtent)
+                 .setMipLevels(1)
+                 .setArrayLayers(1)
+                 .setSamples(vk::SampleCountFlagBits::e1)
+                 .setTiling(tiling)
+                 .setInitialLayout(vk::ImageLayout::eUndefined)
+                 .setUsage(usage)
+                 .setSamples(vk::SampleCountFlagBits::e1)
+                 .setSharingMode(vk::SharingMode::eExclusive);
+
+        image.data.emplace(*device, imageInfo);
+
+        vk::MemoryRequirements memoryRequirements = image.data->getMemoryRequirements();
+        vk::MemoryAllocateInfo memoryAllocateInfo( memoryRequirements.size, FindMemoryType( physicalDevice->getMemoryProperties(),
+                                                   memoryRequirements.memoryTypeBits, properties ) );
+        image.memory.emplace(*device, memoryAllocateInfo);
+        image.data->bindMemory( *image.memory, 0 );
+    }
+
+    void GraphicsDevice::copyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, const vk::DeviceSize& size) const {
+        vk::raii::CommandBuffer cmd = beginSingleTimeCommands();
+
+        vk::BufferCopy copyRegion{};
+        copyRegion.setSize(size);
+        cmd.copyBuffer(*srcBuffer.data, *dstBuffer.data, { copyRegion });
+
+        endSingleTimeCommands(cmd);
+    }
+
+    vk::raii::CommandBuffer GraphicsDevice::beginSingleTimeCommands() const {
+        vk::CommandBufferAllocateInfo allocInfo{};
+        allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
+                 .setCommandPool(*commandPool)
+                 .setCommandBufferCount(1);
+
+        vk::raii::CommandBuffer cmd = std::move(device->allocateCommandBuffers(allocInfo).front());
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+        cmd.begin(beginInfo);
+
+        return cmd;
+    }
+
+    void GraphicsDevice::endSingleTimeCommands(const vk::raii::CommandBuffer &cmd) const {
+        cmd.end();
+        vk::SubmitInfo submitInfo{};
+        submitInfo.setCommandBufferCount(1)
+                 .setPCommandBuffers(&*cmd);
+        graphicsQueue->submit(submitInfo, nullptr);
+        graphicsQueue->waitIdle();
+    }
+
+    void GraphicsDevice::transitionImageLayout(const Image2D& image, vk::Format format, vk::ImageLayout oldLayout,vk::ImageLayout newLayout) const {
+        vk::raii::CommandBuffer cmd = beginSingleTimeCommands();
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.setOldLayout(oldLayout)
+               .setNewLayout(newLayout)
+               .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+               .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+               .setImage(*image.data)
+               .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+        vk::PipelineStageFlags sourceStage;
+        vk::PipelineStageFlags destinationStage;
+
+        if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+            barrier.setSrcAccessMask({})
+                   .setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+
+            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            destinationStage = vk::PipelineStageFlagBits::eTransfer;
+        }else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+            barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
+                   .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+            sourceStage = vk::PipelineStageFlagBits::eTransfer;
+            destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+        }else {
+            throw std::invalid_argument("Unsupported layout transition!");
+        }
+
+        cmd.pipelineBarrier(sourceStage, destinationStage, {}, {}, {}, { barrier });
+
+        endSingleTimeCommands(cmd);
+    }
+
+    void GraphicsDevice::copyBufferToImage(const Buffer& buffer, const Image2D& image, const vk::Extent3D& imageExtent) const {
+        vk::raii::CommandBuffer cmd = beginSingleTimeCommands();
+
+        vk::BufferImageCopy region{};
+        region.setImageSubresource({ vk::ImageAspectFlagBits::eColor, 0, 0, 1 })
+              .setImageOffset({ 0, 0, 0 })
+              .setImageExtent(imageExtent)
+              .setBufferOffset(0)
+              .setBufferRowLength(0)
+              .setBufferImageHeight(0);
+
+        cmd.copyBufferToImage(*buffer.data, *image.data, vk::ImageLayout::eTransferDstOptimal, { region });
+
+        endSingleTimeCommands(cmd);
     }
 
     void GraphicsDevice::recreateSwapchain(const windowing::sdl::UfoxWindow& window) {

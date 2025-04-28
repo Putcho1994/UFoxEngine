@@ -4,12 +4,16 @@
 
 #include "ufox_windowing.hpp"
 
+#include "fmt/base.h"
+
 namespace ufox::windowing::sdl
 {
     SDLException::SDLException(const std::string& msg) : std::runtime_error(msg + ": " + SDL_GetError()) {}
 
     UfoxWindow::UfoxWindow(const std::string& title, Uint32 flags):_window{nullptr, SDL_DestroyWindow} {
         if (!SDL_Init(SDL_INIT_VIDEO)) throw SDLException("Failed to initialize SDL");
+
+
 
         SDL_DisplayID primary = SDL_GetPrimaryDisplay();
         SDL_Rect usableBounds{};
