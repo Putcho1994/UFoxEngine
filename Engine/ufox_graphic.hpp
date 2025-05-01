@@ -25,13 +25,19 @@ namespace ufox::graphics {
     struct Vertex {
         glm::vec3 position;
         glm::vec4 color;
+        glm::vec2 texCoord;
     };
 
     static constexpr Vertex TestRect[] = {
-        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f, 1.0f}},
-        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 1.0f}},
-        {{0.5f, 0.5f,0.0f}, {0.0f, 0.0f, 1.0f, 1.0f}},
-        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}
+        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f,1.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f,1.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f,1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f,1.0f}, {0.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f,1.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f,1.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f,1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f,1.0f}, {0.0f, 1.0f}}
     };
 }
 
@@ -39,18 +45,27 @@ namespace ufox::graphics::vulkan {
 
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
-    static uint32_t FindMemoryType( vk::PhysicalDeviceMemoryProperties const & memoryProperties, uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask );
+    static uint32_t FindMemoryType(const vk::PhysicalDeviceMemoryProperties & memoryProperties, uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask );
 
-    static void TransitionImageLayout(const vk::raii::CommandBuffer& cmd, const vk::Image& image,
+    static void TransitionImageLayout(const vk::raii::CommandBuffer& cmd, const vk::Image& image, const vk::Format& format,
             vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
             vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess,
             vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage);
 
     static std::vector<char> loadShader(const std::string& filename);
 
-    struct Image2D {
+    struct Image {
         std::optional<vk::raii::Image> data{};
         std::optional<vk::raii::DeviceMemory> memory{};
+        std::optional<vk::raii::ImageView> view{};
+        vk::Format format{ vk::Format::eUndefined};
+        vk::Extent2D extent{ 0, 0 };
+
+        void clear() {
+            view.reset();
+            data.reset();
+            memory.reset();
+        }
     };
 
     struct Buffer {
@@ -93,13 +108,14 @@ namespace ufox::graphics::vulkan {
         void waitForIdle() const;
 
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, Buffer& buffer);
-        void createImage(const vk::Extent3D& imageExtent, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage,
-                          vk::MemoryPropertyFlags properties, Image2D& image);
+        void createImage(vk::ImageTiling tiling, vk::ImageUsageFlags usage,
+                          vk::MemoryPropertyFlags properties, Image& image);
         void copyBuffer(const Buffer& srcBuffer, const Buffer& dstBuffer, const vk::DeviceSize& size) const;
         [[nodiscard]] vk::raii::CommandBuffer beginSingleTimeCommands() const;
         void endSingleTimeCommands(const vk::raii::CommandBuffer& cmd) const;
-        void transitionImageLayout(const Image2D& image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
-        void copyBufferToImage(const Buffer& buffer, const Image2D& image, const vk::Extent3D& imageExtent) const;
+        void transitionImageLayout(const Image& image,vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
+        void copyBufferToImage(const Buffer &buffer, const Image &image) const;
+        [[nodiscard]] vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) const;
 
     private:
         //Instance properties
@@ -125,6 +141,8 @@ namespace ufox::graphics::vulkan {
         vk::PresentModeKHR presentMode{ vk::PresentModeKHR::eFifo};
         vk::Extent2D swapchainExtent{ 0, 0 };
 
+        Image depthImage{};
+
         std::optional<vk::raii::DescriptorSetLayout> descriptorSetLayout{};
         std::optional<vk::raii::PipelineLayout> pipelineLayout{};
         std::optional<vk::raii::Pipeline> graphicsPipeline{};
@@ -136,20 +154,25 @@ namespace ufox::graphics::vulkan {
 
 
 
-        const uint32_t indices[6] {
-            0, 1, 2, 2, 3, 0
+        const uint16_t indices[12] {
+            0, 1, 2, 2, 3, 0,
+            4, 5, 6, 6, 7, 4
         };
 
-        Image2D textureImage{};
+        Image textureImage{};
+        std::optional<vk::raii::Sampler> textureSampler{};
         Buffer vertexBuffer{};
         Buffer indexBuffer{};
         std::vector<Buffer> uniformBuffers;
         std::vector<uint8_t *> uniformBuffersMapped;
 
         void createSwapchain(const windowing::sdl::UfoxWindow& window);
+        void createDepthImage();
         void createDescriptorSetLayout();
         void createGraphicsPipeline();
         void createTextureImage();
+        void createTextureImageView();
+        void createTextureSampler();
         void createVertexBuffer();
         void createIndexBuffer();
         void createUniformBuffers();

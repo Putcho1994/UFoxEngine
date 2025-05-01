@@ -4,13 +4,12 @@
 
 #include "ufox_graphic.hpp"
 
+#include <barrier>
 
-#include "glm/gtc/type_ptr.hpp"
 
 namespace ufox::graphics::vulkan {
-
-    uint32_t FindMemoryType(vk::PhysicalDeviceMemoryProperties const &memoryProperties, uint32_t typeBits,
-        vk::MemoryPropertyFlags requirementsMask){
+    uint32_t FindMemoryType(const vk::PhysicalDeviceMemoryProperties &memoryProperties, uint32_t typeBits,
+                            vk::MemoryPropertyFlags requirementsMask){
         auto typeIndex = static_cast<uint32_t>(~0);
         for ( uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++ )
         {
@@ -25,7 +24,7 @@ namespace ufox::graphics::vulkan {
         return typeIndex;
     }
 
-    void TransitionImageLayout(const vk::raii::CommandBuffer& cmd, const vk::Image& image,
+   void TransitionImageLayout(const vk::raii::CommandBuffer& cmd, const vk::Image& image, const vk::Format& format,
                                vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
                                vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess,
                                vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage){
@@ -39,7 +38,19 @@ namespace ufox::graphics::vulkan {
             .setDstAccessMask(dstAccess)
             .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
             .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
-            .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+            .setSubresourceRange({ vk::ImageAspectFlagBits::eNone, 0, 1, 0, 1 });
+
+        if (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+
+            if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint) {
+                barrier.subresourceRange.setAspectMask( vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil);
+            }
+            else
+                barrier.subresourceRange.setAspectMask( vk::ImageAspectFlagBits::eDepth);
+        } else {
+            barrier.subresourceRange.setAspectMask( vk::ImageAspectFlagBits::eColor);
+        }
+
 
         vk::DependencyInfo dependency{};
         dependency.setImageMemoryBarrierCount(1)
@@ -176,15 +187,17 @@ namespace ufox::graphics::vulkan {
                 .setSynchronization2(true)
                 .setDynamicRendering(true);
 
-            vk::PhysicalDeviceFeatures2 features{};
-            features.setPNext(&vulkan13Features);
+            vk::PhysicalDeviceFeatures2 features2{};
+            features2.features.setSamplerAnisotropy(true);
+            features2.setPNext(&vulkan13Features);
+
 
             vk::DeviceCreateInfo createDeviceInfo{};
             createDeviceInfo.setQueueCreateInfoCount(static_cast<uint32_t>(queueInfos.size()))
                 .setPQueueCreateInfos(queueInfos.data())
                 .setEnabledExtensionCount(static_cast<uint32_t>(requiredDeviceExtensions.size()))
                 .setPpEnabledExtensionNames(requiredDeviceExtensions.data())
-                .setPNext(&features);
+                .setPNext(&features2);
 
             device.emplace(*physicalDevice, createDeviceInfo);
             graphicsQueue.emplace(*device, *queueFamilyIndices.graphics, 0);
@@ -224,9 +237,12 @@ namespace ufox::graphics::vulkan {
 #pragma endregion
 
         createSwapchain(window);
+        createDepthImage();
         createDescriptorSetLayout();
         createGraphicsPipeline();
         createTextureImage();
+        createTextureImageView();
+        createTextureSampler();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
@@ -326,19 +342,74 @@ namespace ufox::graphics::vulkan {
             swapchainImageViews.emplace_back(*device, viewInfo);
         }
 #pragma endregion
+
+
     }
 
+    void GraphicsDevice::createDepthImage() {
+        // Find a supported depth format
+        std::vector<vk::Format> candidates = {
+            vk::Format::eD32Sfloat,
+            vk::Format::eD32SfloatS8Uint,
+            vk::Format::eD24UnormS8Uint
+        };
+        depthImage.format = findSupportedFormat(
+            candidates,
+            vk::ImageTiling::eOptimal,
+            vk::FormatFeatureFlagBits::eDepthStencilAttachment
+        );
+
+        // Set extent to match swapchain
+        depthImage.extent = swapchainExtent;
+
+        // Create depth image
+        createImage(
+            vk::ImageTiling::eOptimal,
+            vk::ImageUsageFlagBits::eDepthStencilAttachment,
+            vk::MemoryPropertyFlagBits::eDeviceLocal,
+            depthImage
+        );
+
+        // Create image view
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.setImage(*depthImage.data)
+                .setViewType(vk::ImageViewType::e2D)
+                .setFormat(depthImage.format)
+                .setSubresourceRange({
+                    depthImage.format == vk::Format::eD32Sfloat ? vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
+                    0, 1, 0, 1
+                });
+        depthImage.view.emplace(*device, viewInfo);
+
+        // Transition to depth-stencil attachment layout
+        transitionImageLayout(
+            depthImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal
+        );
+    }
+
+
     void GraphicsDevice::createDescriptorSetLayout() {
-        vk::DescriptorSetLayoutBinding binding{};
-        binding.setBinding(0)
+        vk::DescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.setBinding(0)
             .setDescriptorType(vk::DescriptorType::eUniformBuffer)
             .setDescriptorCount(1)
             .setStageFlags(vk::ShaderStageFlagBits::eVertex)
             .setPImmutableSamplers(nullptr);
 
+        vk::DescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.setBinding(1)
+                            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                            .setDescriptorCount(1)
+                            .setStageFlags(vk::ShaderStageFlagBits::eFragment)
+                            .setPImmutableSamplers(nullptr);
+
+        std::array bindings = { uboLayoutBinding, samplerLayoutBinding };
+
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.setBindingCount(1)
-            .setPBindings(&binding);
+        layoutInfo.setBindingCount( bindings.size())
+                  .setPBindings(bindings.data());
 
         descriptorSetLayout.emplace(*device, layoutInfo);
     }
@@ -361,7 +432,7 @@ namespace ufox::graphics::vulkan {
                           .setStride(sizeof(Vertex))
                           .setInputRate(vk::VertexInputRate::eVertex);
 
-        std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
+        std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions{};
         attributeDescriptions[0].setBinding(0)
                                 .setLocation(0)
                                 .setFormat(vk::Format::eR32G32B32Sfloat)
@@ -371,6 +442,11 @@ namespace ufox::graphics::vulkan {
                                 .setLocation(1)
                                 .setFormat(vk::Format::eR32G32B32A32Sfloat)
                                 .setOffset(offsetof(Vertex, color));
+
+        attributeDescriptions[2].setBinding(0)
+                                .setLocation(2)
+                                .setFormat(vk::Format::eR32G32Sfloat)
+                                .setOffset(offsetof(Vertex, texCoord));
 
         vertexInput.setVertexBindingDescriptionCount(1)
                    .setVertexAttributeDescriptionCount( attributeDescriptions.size())
@@ -396,8 +472,15 @@ namespace ufox::graphics::vulkan {
         multisample.setRasterizationSamples(vk::SampleCountFlagBits::e1);
 
         vk::PipelineColorBlendAttachmentState blendAttachment{};
-        blendAttachment.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+        blendAttachment.setBlendEnable(true)
+                       .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha) // Use alpha for color
+                       .setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha) // 1 - alpha for background
+                       .setColorBlendOp(vk::BlendOp::eAdd) // Add blended colors
+                       .setSrcAlphaBlendFactor(vk::BlendFactor::eOne) // Preserve alpha
+                       .setDstAlphaBlendFactor(vk::BlendFactor::eZero)
+                       .setAlphaBlendOp(vk::BlendOp::eAdd)
+                       .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 
         vk::PipelineColorBlendStateCreateInfo blendState{};
         blendState.setAttachmentCount(1).setPAttachments(&blendAttachment);
@@ -411,26 +494,35 @@ namespace ufox::graphics::vulkan {
         pipelineLayoutInfo.setSetLayoutCount(1)
         .setPSetLayouts(&**descriptorSetLayout);
 
-
         pipelineLayout.emplace(*device, pipelineLayoutInfo);
 
         vk::PipelineRenderingCreateInfo renderingInfo{};
-        renderingInfo.setColorAttachmentCount(1).setPColorAttachmentFormats(&swapchainFormat);
+        renderingInfo.setColorAttachmentCount(1)
+                     .setPColorAttachmentFormats(&swapchainFormat)
+                     .setDepthAttachmentFormat(depthImage.format);
+
+        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.setDepthTestEnable(true)
+               .setDepthWriteEnable(true)
+               .setDepthCompareOp(vk::CompareOp::eLess)
+               .setDepthBoundsTestEnable(false)
+               .setStencilTestEnable(false);
 
         vk::GraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.setStageCount(stages.size())
-            .setPStages(stages.data())
-            .setPVertexInputState(&vertexInput)
-            .setPInputAssemblyState(&inputAssembly)
-            .setPViewportState(&viewportState)
-            .setPRasterizationState(&rasterizer)
-            .setPMultisampleState(&multisample)
-            .setPColorBlendState(&blendState)
-            .setPDynamicState(&dynamicState)
-            .setLayout(**pipelineLayout)
-            .setRenderPass(nullptr)
-            .setSubpass(0)
-            .setPNext(&renderingInfo);
+                    .setPStages(stages.data())
+                    .setPVertexInputState(&vertexInput)
+                    .setPInputAssemblyState(&inputAssembly)
+                    .setPViewportState(&viewportState)
+                    .setPRasterizationState(&rasterizer)
+                    .setPMultisampleState(&multisample)
+                    .setPColorBlendState(&blendState)
+                    .setPDynamicState(&dynamicState)
+                    .setPDepthStencilState(&depthStencil)
+                    .setLayout(**pipelineLayout)
+                    .setRenderPass(nullptr)
+                    .setSubpass(0)
+                    .setPNext(&renderingInfo);
 
 
         graphicsPipeline.emplace(*device, nullptr, pipelineInfo);
@@ -446,12 +538,13 @@ namespace ufox::graphics::vulkan {
             throw std::runtime_error(std::string("Failed to load texture: ") + SDL_GetError());
 
         std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> convSurface
-        {SDL_ConvertSurface(rawSurface.get(), SDL_PIXELFORMAT_RGBA8888), SDL_DestroySurface};
+        {SDL_ConvertSurface(rawSurface.get(), SDL_PIXELFORMAT_ABGR8888), SDL_DestroySurface};
         if (!convSurface)
             throw std::runtime_error(std::string("Failed to convert texture: ") + SDL_GetError());
 
-        vk::Extent3D imageExtent{static_cast<uint32_t>(convSurface->w), static_cast<uint32_t>(convSurface->h), 1};
-        vk::DeviceSize imageSize = imageExtent.width * imageExtent.height * 4;
+        textureImage.format = vk::Format::eR8G8B8A8Srgb;
+        textureImage.extent = vk::Extent2D{static_cast<uint32_t>(convSurface->w), static_cast<uint32_t>(convSurface->h)};
+        vk::DeviceSize imageSize = textureImage.extent.width * textureImage.extent.height * 4;
 
         Buffer stagingBuffer{};
         createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
@@ -461,12 +554,47 @@ namespace ufox::graphics::vulkan {
         memcpy( pData, convSurface->pixels,  imageSize);
         stagingBuffer.memory->unmapMemory();
 
-        createImage(imageExtent, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
-                    vk::ImageUsageFlagBits::eTransferDst|vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage);
+        createImage(vk::ImageTiling::eOptimal,vk::ImageUsageFlagBits::eTransferDst|vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage);
 
-        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-        copyBufferToImage(stagingBuffer, textureImage, imageExtent);
-        transitionImageLayout(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+        transitionImageLayout(textureImage,vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+        copyBufferToImage(stagingBuffer, textureImage);
+        transitionImageLayout(textureImage,vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+    }
+
+    void GraphicsDevice::createTextureImageView() {
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.setImage(*textureImage.data)
+                .setViewType(vk::ImageViewType::e2D)
+                .setFormat(textureImage.format)
+                .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+        textureImage.view.emplace(*device, viewInfo);
+    }
+
+    void GraphicsDevice::createTextureSampler() {
+
+        vk::PhysicalDeviceProperties deviceProperties = physicalDevice->getProperties();
+
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.setMagFilter(vk::Filter::eLinear)
+                    .setMinFilter(vk::Filter::eLinear)
+                    .setAddressModeU(vk::SamplerAddressMode::eRepeat)
+                    .setAddressModeV(vk::SamplerAddressMode::eRepeat)
+                    .setAddressModeW(vk::SamplerAddressMode::eRepeat)
+                    .setMipmapMode(vk::SamplerMipmapMode::eLinear)
+                    .setBorderColor(vk::BorderColor::eFloatOpaqueWhite)
+                    .setAnisotropyEnable(true)
+                    .setMaxAnisotropy(deviceProperties.limits.maxSamplerAnisotropy)
+                    .setBorderColor(vk::BorderColor::eFloatOpaqueWhite)
+                    .setUnnormalizedCoordinates(false)
+                    .setCompareEnable(false)
+                    .setCompareOp(vk::CompareOp::eAlways)
+                    .setMinLod(0.0f)
+                    .setMaxLod(0.0f)
+                    .setMipLodBias(0.0f);
+
+        textureSampler.emplace(*device, samplerInfo);
     }
 
     void GraphicsDevice::createVertexBuffer() {
@@ -545,13 +673,15 @@ namespace ufox::graphics::vulkan {
     }
 
     void GraphicsDevice::createDescriptorPool() {
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.setType(vk::DescriptorType::eUniformBuffer)
-                .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
+        std::array<vk::DescriptorPoolSize, 2> poolSize{};
+        poolSize[0].setType(vk::DescriptorType::eUniformBuffer)
+                   .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
+        poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler)
+                   .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
 
         vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.setPoolSizeCount(1)
-                .setPPoolSizes(&poolSize)
+        poolInfo.setPoolSizeCount(poolSize.size())
+                .setPPoolSizes(poolSize.data())
                 .setMaxSets(MAX_FRAMES_IN_FLIGHT)
                 .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
 
@@ -574,13 +704,25 @@ namespace ufox::graphics::vulkan {
                       .setOffset(0)
                       .setRange(sizeof(UniformBufferObject));
 
-            vk::WriteDescriptorSet write{};
-            write.setDstSet(*descriptorSets[i])
+            vk::DescriptorImageInfo imageInfo{};
+            imageInfo.setImageView(*textureImage.view)
+                     .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                     .setSampler(*textureSampler);
+
+
+            std::array<vk::WriteDescriptorSet,2> write{};
+            write[0].setDstSet(*descriptorSets[i])
                  .setDstBinding(0)
                  .setDstArrayElement(0)
                  .setDescriptorType(vk::DescriptorType::eUniformBuffer)
                  .setDescriptorCount(1)
                  .setPBufferInfo(&bufferInfo);
+            write[1].setDstSet(*descriptorSets[i])
+                 .setDstBinding(1)
+                 .setDstArrayElement(0)
+                 .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                 .setDescriptorCount(1)
+                 .setPImageInfo(&imageInfo);
 
             device->updateDescriptorSets(write, nullptr);
         }
@@ -603,13 +745,13 @@ namespace ufox::graphics::vulkan {
         buffer.data->bindMemory( *buffer.memory, 0 );
     }
 
-    void GraphicsDevice::createImage(const vk::Extent3D& imageExtent, vk::Format format, vk::ImageTiling tiling,
-        vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, Image2D& image) {
+    void GraphicsDevice::createImage(vk::ImageTiling tiling,
+        vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, Image& image) {
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.setImageType(vk::ImageType::e2D)
-                 .setFormat(format)
-                 .setExtent(imageExtent)
+                 .setFormat(image.format)
+                 .setExtent({image.extent.width, image.extent.height, 1})
                  .setMipLevels(1)
                  .setArrayLayers(1)
                  .setSamples(vk::SampleCountFlagBits::e1)
@@ -662,48 +804,56 @@ namespace ufox::graphics::vulkan {
         graphicsQueue->waitIdle();
     }
 
-    void GraphicsDevice::transitionImageLayout(const Image2D& image, vk::Format format, vk::ImageLayout oldLayout,vk::ImageLayout newLayout) const {
+    void GraphicsDevice::transitionImageLayout(const Image& image, vk::ImageLayout oldLayout,vk::ImageLayout newLayout) const {
         vk::raii::CommandBuffer cmd = beginSingleTimeCommands();
 
-        vk::ImageMemoryBarrier barrier{};
-        barrier.setOldLayout(oldLayout)
-               .setNewLayout(newLayout)
-               .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
-               .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
-               .setImage(*image.data)
-               .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+    vk::ImageMemoryBarrier barrier{};
+    barrier.setOldLayout(oldLayout)
+           .setNewLayout(newLayout)
+           .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+           .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+           .setImage(*image.data)
+           .setSubresourceRange({
+               image.format == vk::Format::eR8G8B8A8Srgb ? vk::ImageAspectFlagBits::eColor :
+               (image.format == vk::Format::eD32Sfloat ? vk::ImageAspectFlagBits::eDepth :
+                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil),
+               0, 1, 0, 1
+           });
 
-        vk::PipelineStageFlags sourceStage;
-        vk::PipelineStageFlags destinationStage;
+    vk::PipelineStageFlags sourceStage;
+    vk::PipelineStageFlags destinationStage;
 
-        if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
-            barrier.setSrcAccessMask({})
-                   .setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
-
-            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-            destinationStage = vk::PipelineStageFlagBits::eTransfer;
-        }else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
-            barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
-                   .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
-
-            sourceStage = vk::PipelineStageFlagBits::eTransfer;
-            destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-        }else {
-            throw std::invalid_argument("Unsupported layout transition!");
-        }
-
-        cmd.pipelineBarrier(sourceStage, destinationStage, {}, {}, {}, { barrier });
-
-        endSingleTimeCommands(cmd);
+    if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+        barrier.setSrcAccessMask({})
+               .setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+        sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+        destinationStage = vk::PipelineStageFlagBits::eTransfer;
+    } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+        barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
+               .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+        sourceStage = vk::PipelineStageFlagBits::eTransfer;
+        destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+    } else if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal) {
+        barrier.setSrcAccessMask({})
+               .setDstAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+        sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+        destinationStage = vk::PipelineStageFlagBits::eEarlyFragmentTests;
+    } else {
+        throw std::invalid_argument("Unsupported layout transition!");
     }
 
-    void GraphicsDevice::copyBufferToImage(const Buffer& buffer, const Image2D& image, const vk::Extent3D& imageExtent) const {
+    cmd.pipelineBarrier(sourceStage, destinationStage, {}, {}, {}, { barrier });
+
+    endSingleTimeCommands(cmd);
+    }
+
+    void GraphicsDevice::copyBufferToImage(const Buffer& buffer, const Image& image) const {
         vk::raii::CommandBuffer cmd = beginSingleTimeCommands();
 
         vk::BufferImageCopy region{};
         region.setImageSubresource({ vk::ImageAspectFlagBits::eColor, 0, 0, 1 })
               .setImageOffset({ 0, 0, 0 })
-              .setImageExtent(imageExtent)
+              .setImageExtent({image.extent.width, image.extent.height, 1})
               .setBufferOffset(0)
               .setBufferRowLength(0)
               .setBufferImageHeight(0);
@@ -713,12 +863,29 @@ namespace ufox::graphics::vulkan {
         endSingleTimeCommands(cmd);
     }
 
+    vk::Format GraphicsDevice::findSupportedFormat(const std::vector<vk::Format> &candidates, vk::ImageTiling tiling,
+        vk::FormatFeatureFlags features) const {
+
+        for(vk::Format format : candidates) {
+            vk::FormatProperties props = physicalDevice->getFormatProperties(format);
+            if (tiling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features) == features) {
+                return format;
+            }
+            if (tiling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features) == features) {
+                return format;
+            }
+        }
+
+        throw std::runtime_error("failed to find supported format!");
+    }
+
     void GraphicsDevice::recreateSwapchain(const windowing::sdl::UfoxWindow& window) {
         waitForIdle();
-
+        depthImage.clear();
         swapchainImageViews.clear();
         swapchain.reset();
         createSwapchain(window);
+        createDepthImage();
     }
 
     void GraphicsDevice::drawFrame(const windowing::sdl::UfoxWindow& window) {
@@ -745,10 +912,11 @@ namespace ufox::graphics::vulkan {
         vk::CommandBufferBeginInfo beginInfo{};
         cmd.begin(beginInfo);
 
-        TransitionImageLayout(cmd, swapchainImages[imageIndex],
+        TransitionImageLayout(cmd, swapchainImages[imageIndex], swapchainFormat,
             vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
             vk::AccessFlagBits2::eNone, vk::AccessFlagBits2::eColorAttachmentWrite,
             vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+
 
         vk::RenderingAttachmentInfo colorAttachment{};
         colorAttachment.setImageView(*swapchainImageViews[imageIndex])
@@ -757,11 +925,20 @@ namespace ufox::graphics::vulkan {
             .setStoreOp(vk::AttachmentStoreOp::eStore)
             .setClearValue({ std::array{0.2f, 0.2f, 0.2f, 1.0f} });
 
+        vk::RenderingAttachmentInfo depthAttachment{};
+        depthAttachment.setImageView(*depthImage.view)
+                       .setImageLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
+                       .setLoadOp(vk::AttachmentLoadOp::eClear)
+                       .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+                       .setClearValue(vk::ClearValue(vk::ClearDepthStencilValue(1.0f, 0)));
+
+
         vk::RenderingInfo renderingInfo{};
         renderingInfo.setRenderArea({ {0, 0}, swapchainExtent })
             .setLayerCount(1)
             .setColorAttachmentCount(1)
-            .setPColorAttachments(&colorAttachment);
+            .setPColorAttachments(&colorAttachment)
+            .setPDepthAttachment(&depthAttachment);
 
         cmd.beginRendering(renderingInfo);
 
@@ -772,20 +949,27 @@ namespace ufox::graphics::vulkan {
         cmd.setCullMode(vk::CullModeFlagBits::eNone);
         cmd.setFrontFace(vk::FrontFace::eClockwise);
         cmd.setPrimitiveTopology(vk::PrimitiveTopology::eTriangleList);
+
+        // cmd.clearColorImage(swapchainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ClearColorValue{0.023f,0.033f,0.033f,1.0f},
+        //             vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0,1,0,1});
+
         vk::Buffer vertexBuffers[] = {*vertexBuffer.data};
         vk::DeviceSize offsets[] = {0};
 
         cmd.bindVertexBuffers( 0, vertexBuffers, offsets );
-        cmd.bindIndexBuffer( *indexBuffer.data, 0, vk::IndexType::eUint32 );
+        cmd.bindIndexBuffer( *indexBuffer.data, 0, vk::IndexType::eUint16 );
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descriptorSets[currentFrame], nullptr);
+
         cmd.drawIndexed(static_cast<uint32_t>(std::size(indices)), 1, 0, 0, 0);
 
         cmd.endRendering();
 
-        TransitionImageLayout(cmd, swapchainImages[imageIndex],
+        TransitionImageLayout(cmd, swapchainImages[imageIndex], swapchainFormat,
             vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
             vk::AccessFlagBits2::eColorAttachmentWrite, vk::AccessFlagBits2::eNone,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
+
+
 
         cmd.end();
 
