@@ -4,6 +4,8 @@
 
 #include "ufox_windowing.hpp"
 
+#include "fmt/base.h"
+
 namespace ufox::windowing::sdl
 {
     SDLException::SDLException(const std::string& msg) : std::runtime_error(msg + ": " + SDL_GetError()) {}
@@ -11,13 +13,18 @@ namespace ufox::windowing::sdl
     UfoxWindow::UfoxWindow(const std::string& title, Uint32 flags):_window{nullptr, SDL_DestroyWindow} {
         if (!SDL_Init(SDL_INIT_VIDEO)) throw SDLException("Failed to initialize SDL");
 
+
+
         SDL_DisplayID primary = SDL_GetPrimaryDisplay();
         SDL_Rect usableBounds{};
         SDL_GetDisplayUsableBounds(primary, &usableBounds);
 
         // Create window while ensuring proper cleanup on failure
+        // SDL_Window *rawWindow = SDL_CreateWindow(title.c_str(),
+        //     usableBounds.w - 4, usableBounds.h - 34, flags);
+
         SDL_Window *rawWindow = SDL_CreateWindow(title.c_str(),
-            usableBounds.w - 4, usableBounds.h - 34, flags);
+            800, 600, flags);
 
         if (!rawWindow) {
             throw SDLException("Failed to create window");
