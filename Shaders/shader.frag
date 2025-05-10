@@ -25,67 +25,48 @@ float roundedBoxSDF(vec2 centerPosition, vec2 size, vec4 radius) {
     (centerPosition.x > 0.0 && centerPosition.y > 0.0) ? radius.y : // Top-right
     (centerPosition.x < 0.0 && centerPosition.y < 0.0) ? radius.z : // Bottom-left
     radius.w; // Bottom-right
-
     vec2 q = abs(centerPosition) - size + finalRadius;
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - finalRadius;
 }
 
+// Linear interpolation for vec3
 vec3 lerp(vec3 colorA, vec3 colorB, float value) {
-    return (colorA + value * (colorB - colorA));
+    return colorA + value * (colorB - colorA);
 }
 
 void main() {
-    // Calculate pixel position based on texture coordinates and scale
+    // Calculate pixel position and center
     vec2 pixelPos = fragTexCoord * fragScale;
     vec2 center = fragScale * 0.5;
     vec2 rectCorner = fragScale * 0.5;
     vec2 centerPos = pixelPos - center;
 
-    // Compute border corner
+    // Compute border corner with optimized quadrant check
     vec2 borderCorner = rectCorner;
-    if (pixelPos.y >= center.y) {
-        borderCorner.y -= params.borderThickness.z; // Bottom thickness
-    } else {
-        borderCorner.y -= params.borderThickness.x; // Top thickness
-    }
-    if (pixelPos.x >= center.x) {
-        borderCorner.x -= params.borderThickness.y; // Right thickness
-    } else {
-        borderCorner.x -= params.borderThickness.w; // Left thickness
-    }
+    float yQuad = step(center.y, pixelPos.y); // 0 if above center, 1 if below
+    float xQuad = step(center.x, pixelPos.x); // 0 if left of center, 1 if right
+    borderCorner.y -= mix(params.borderThickness.x, params.borderThickness.z, yQuad); // Top or bottom thickness
+    borderCorner.x -= mix(params.borderThickness.w, params.borderThickness.y, xQuad); // Left or right thickness
 
     // Adjust inner corner radius based on border thickness
     vec4 adjustedCornerRadius = params.cornerRadius;
-    if (pixelPos.y >= center.y) {
-        // Bottom half: reduce bottom-left and bottom-right radius
-        adjustedCornerRadius.z = max(params.cornerRadius.z - params.borderThickness.z, 0.0); // Bottom-left
-        adjustedCornerRadius.w = max(params.cornerRadius.w - params.borderThickness.z, 0.0); // Bottom-right
-    } else {
-        // Top half: reduce top-left and top-right radius
-        adjustedCornerRadius.x = max(params.cornerRadius.x - params.borderThickness.x, 0.0); // Top-left
-        adjustedCornerRadius.y = max(params.cornerRadius.y - params.borderThickness.x, 0.0); // Top-right
-    }
-    if (pixelPos.x >= center.x) {
-        // Right half: reduce top-right and bottom-right radius
-        adjustedCornerRadius.y = max(adjustedCornerRadius.y - params.borderThickness.y, 0.0); // Top-right
-        adjustedCornerRadius.w = max(adjustedCornerRadius.w - params.borderThickness.y, 0.0); // Bottom-right
-    } else {
-        // Left half: reduce top-left and bottom-left radius
-        adjustedCornerRadius.x = max(adjustedCornerRadius.x - params.borderThickness.w, 0.0); // Top-left
-        adjustedCornerRadius.z = max(adjustedCornerRadius.z - params.borderThickness.w, 0.0); // Bottom-left
-    }
+    float maxThicknessX = mix(params.borderThickness.w, params.borderThickness.y, xQuad); // Left or right max
+    float maxThicknessY = mix(params.borderThickness.x, params.borderThickness.z, yQuad); // Top or bottom max
+    adjustedCornerRadius.x = max(params.cornerRadius.x - (maxThicknessX + maxThicknessY) * 0.5, 0.0); // Top-left
+    adjustedCornerRadius.y = max(params.cornerRadius.y - (maxThicknessX + maxThicknessY) * 0.5, 0.0); // Top-right
+    adjustedCornerRadius.z = max(params.cornerRadius.z - (maxThicknessX + maxThicknessY) * 0.5, 0.0); // Bottom-left
+    adjustedCornerRadius.w = max(params.cornerRadius.w - (maxThicknessX + maxThicknessY) * 0.5, 0.0); // Bottom-right
 
     // Compute SDF distances
     float shapeDistance = roundedBoxSDF(centerPos, rectCorner, params.cornerRadius);
     float backgroundDistance = roundedBoxSDF(centerPos, borderCorner, adjustedCornerRadius);
 
     // Determine the closest edge color for the entire shape
-    vec4 borderColor = black;
+    vec4 borderColor = params.borderTopColor; // Default to top color as fallback
     float topDist = abs(pixelPos.y - (center.y + rectCorner.y));
     float rightDist = abs(pixelPos.x - (center.x + rectCorner.x));
     float bottomDist = abs(pixelPos.y - (center.y - rectCorner.y));
     float leftDist = abs(pixelPos.x - (center.x - rectCorner.x));
-
     float minDist = min(min(topDist, rightDist), min(bottomDist, leftDist));
     if (minDist == topDist) {
         borderColor = params.borderTopColor;
@@ -93,7 +74,7 @@ void main() {
         borderColor = params.borderRightColor;
     } else if (minDist == bottomDist) {
         borderColor = params.borderBottomColor;
-    } else {
+    } else if (minDist == leftDist) {
         borderColor = params.borderLeftColor;
     }
 
@@ -103,13 +84,12 @@ void main() {
 
     // Combine Fragcolor with textColor and borderColor
     vec4 texColor = texture(texSampler, fragTexCoord);
-    // Lerp between black and white color with vertex color alpha or other source
-    vec4 mainColorOpacity = vec4(lerp(black.rgb, white.rgb, fragColor.a), 1);
-    // Prepare mask
+    vec4 mainColorOpacity = vec4(lerp(black.rgb, white.rgb, fragColor.a), 1.0);
     float mainMask = mix(mainColorOpacity, black, backgroundMask).r;
     float borderMask = mix(black, white, marginMask).r;
     float invertMainMask = mix(white, black, backgroundMask).r;
     float finalBorderMask = borderMask * invertMainMask;
+
     // Coloring
     vec4 finalBorderColor = borderMask * borderColor;
     vec4 finalMainColor = mainMask * texColor;
