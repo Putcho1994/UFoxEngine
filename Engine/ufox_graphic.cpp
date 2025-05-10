@@ -698,8 +698,8 @@ namespace ufox::graphics::vulkan {
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 
         RoundedRectParams params{};
-        params.cornerRadius = glm::vec4(20.0f, 20.0f, 20.0f, 20.0f); // Different radii for each corner
-        params.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f); // Different thicknesses
+        params.cornerRadius = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f); // Different radii for each corner
+        params.borderThickness = glm::vec4(5.0f, 5.0f, 5.0f, 5.0f); // Different thicknesses
         params.borderTopColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Red
         params.borderRightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Green
         params.borderBottomColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Blue
