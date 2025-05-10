@@ -4,8 +4,6 @@
 
 #include "ufox_graphic.hpp"
 
-#include <barrier>
-
 
 namespace ufox::graphics::vulkan {
     uint32_t FindMemoryType(const vk::PhysicalDeviceMemoryProperties &memoryProperties, uint32_t typeBits,
@@ -246,6 +244,7 @@ namespace ufox::graphics::vulkan {
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
+        createRoundedCornerBuffer();
         createDescriptorPool();
         createDescriptorSets();
     }
@@ -391,8 +390,8 @@ namespace ufox::graphics::vulkan {
 
 
     void GraphicsDevice::createDescriptorSetLayout() {
-        vk::DescriptorSetLayoutBinding uboLayoutBinding{};
-        uboLayoutBinding.setBinding(0)
+        vk::DescriptorSetLayoutBinding vertexLayoutBinding{};
+        vertexLayoutBinding.setBinding(0)
             .setDescriptorType(vk::DescriptorType::eUniformBuffer)
             .setDescriptorCount(1)
             .setStageFlags(vk::ShaderStageFlagBits::eVertex)
@@ -405,7 +404,14 @@ namespace ufox::graphics::vulkan {
                             .setStageFlags(vk::ShaderStageFlagBits::eFragment)
                             .setPImmutableSamplers(nullptr);
 
-        std::array bindings = { uboLayoutBinding, samplerLayoutBinding };
+        vk::DescriptorSetLayoutBinding roundedCornerLayoutBinding{};
+        roundedCornerLayoutBinding.setBinding(2)
+                                  .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                                  .setDescriptorCount(1)
+                                  .setStageFlags(vk::ShaderStageFlagBits::eFragment)
+                                  .setPImmutableSamplers(nullptr);
+
+        std::array bindings = { vertexLayoutBinding, samplerLayoutBinding, roundedCornerLayoutBinding };
 
         vk::DescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.setBindingCount( bindings.size())
@@ -636,7 +642,7 @@ namespace ufox::graphics::vulkan {
     }
 
     void GraphicsDevice::createUniformBuffers() {
-        const vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+        constexpr vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
 
         uniformBuffers.reserve(MAX_FRAMES_IN_FLIGHT); // Create elements
         uniformBuffersMapped.reserve(MAX_FRAMES_IN_FLIGHT);
@@ -657,26 +663,64 @@ namespace ufox::graphics::vulkan {
         }
     }
 
+    void GraphicsDevice::createRoundedCornerBuffer() {
+         constexpr vk::DeviceSize bufferSize = sizeof(RoundedRectParams);
+
+        roundCornerBuffers.reserve(MAX_FRAMES_IN_FLIGHT); // Create elements
+        roundCornerBuffersMapped.reserve(MAX_FRAMES_IN_FLIGHT);
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            Buffer buffer{};
+
+            createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                buffer);
+
+            if (!buffer.memory) {
+                throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
+            }
+            auto mapped = static_cast<uint8_t *>(buffer.memory->mapMemory(0, bufferSize));
+            roundCornerBuffers.emplace_back(std::move(buffer));
+            roundCornerBuffersMapped.emplace_back(mapped);
+        }
+    }
+
     void GraphicsDevice::updateUniformBuffer(uint32_t currentImage) const {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float>(currentTime - startTime).count();
-
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapchainExtent.width) / static_cast<float>(swapchainExtent.height), 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1;
+        ubo.model = glm::translate(glm::mat4(1.0f), glm::vec3(0+10, 0+10, 0.0f)) *
+                            glm::scale(glm::mat4(1.0f), glm::vec3(swapchainExtent.width -20, swapchainExtent.height-20, 100));
+        ubo.view = glm::mat4(1.0f);
+        ubo.proj = glm::ortho(
+        0.0f, static_cast<float>(swapchainExtent.width),
+        0.0f, static_cast<float>(swapchainExtent.height), // Swap bottom and top
+        -1.0f, 1.0f);
 
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+
+        RoundedRectParams params{};
+        params.cornerRadius = glm::vec4(20.0f, 20.0f, 20.0f, 20.0f); // Different radii for each corner
+        params.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f); // Different thicknesses
+        params.borderTopColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Red
+        params.borderRightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Green
+        params.borderBottomColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Blue
+        params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Yellow
+        // params.borderThickness = glm::vec4(5.0f, 15.0f, 10.0f, 4.0f); // Different thicknesses
+        // params.borderTopColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f); // Red
+        // params.borderRightColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f); // Green
+        // params.borderBottomColor = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f); // Blue
+        // params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Yellow
+
+        memcpy(roundCornerBuffersMapped[currentImage], &params, sizeof(params));
+
     }
 
     void GraphicsDevice::createDescriptorPool() {
-        std::array<vk::DescriptorPoolSize, 2> poolSize{};
+        std::array<vk::DescriptorPoolSize, 3> poolSize{};
         poolSize[0].setType(vk::DescriptorType::eUniformBuffer)
                    .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
         poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler)
+                   .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
+        poolSize[2].setType(vk::DescriptorType::eUniformBuffer)
                    .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
 
         vk::DescriptorPoolCreateInfo poolInfo{};
@@ -709,20 +753,31 @@ namespace ufox::graphics::vulkan {
                      .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
                      .setSampler(*textureSampler);
 
+            vk::DescriptorBufferInfo roundCornerInfo{};
+            roundCornerInfo.setBuffer(*roundCornerBuffers[i].data)
+                           .setOffset(0)
+                           .setRange(sizeof(RoundedRectParams));
 
-            std::array<vk::WriteDescriptorSet,2> write{};
+
+            std::array<vk::WriteDescriptorSet,3> write{};
             write[0].setDstSet(*descriptorSets[i])
-                 .setDstBinding(0)
-                 .setDstArrayElement(0)
-                 .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                 .setDescriptorCount(1)
-                 .setPBufferInfo(&bufferInfo);
+                    .setDstBinding(0)
+                    .setDstArrayElement(0)
+                    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                    .setDescriptorCount(1)
+                    .setPBufferInfo(&bufferInfo);
             write[1].setDstSet(*descriptorSets[i])
-                 .setDstBinding(1)
-                 .setDstArrayElement(0)
-                 .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                 .setDescriptorCount(1)
-                 .setPImageInfo(&imageInfo);
+                    .setDstBinding(1)
+                    .setDstArrayElement(0)
+                    .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                    .setDescriptorCount(1)
+                    .setPImageInfo(&imageInfo);
+            write[2].setDstSet(*descriptorSets[i])
+                    .setDstBinding(2)
+                    .setDstArrayElement(0)
+                    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                    .setDescriptorCount(1)
+                    .setPBufferInfo(&roundCornerInfo);
 
             device->updateDescriptorSets(write, nullptr);
         }

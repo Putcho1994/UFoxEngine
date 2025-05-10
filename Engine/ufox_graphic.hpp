@@ -18,7 +18,8 @@
 #include "Windowing/ufox_windowing.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "ufox_numerics.hpp"
+#include <chrono>
+
 
 namespace ufox::graphics {
 
@@ -29,15 +30,27 @@ namespace ufox::graphics {
     };
 
     static constexpr Vertex TestRect[] = {
-        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f,1.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f,1.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f,1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f,1.0f}, {0.0f, 1.0f}},
+        {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}, // Top-left
+         {{1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}}, // Top-right
+         {{1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}, // Bottom-right
+         {{0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}, // Bottom-left
 
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f,1.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f,1.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f,1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f,1.0f}, {0.0f, 1.0f}}
+    };
+
+    struct UniformBufferObject {
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 proj;
+    };
+
+    struct RoundedRectParams {
+        glm::vec4 cornerRadius;       // x: top-left, y: top-right, z: bottom-left, w: bottom-right
+        glm::vec4 borderThickness;   // x: top, y: right, z: bottom, w: left
+        glm::vec4 borderTopColor;
+        glm::vec4 borderRightColor;
+        glm::vec4 borderBottomColor;
+        glm::vec4 borderLeftColor;
+
     };
 }
 
@@ -73,11 +86,7 @@ namespace ufox::graphics::vulkan {
         std::optional<vk::raii::DeviceMemory> memory{};
     };
 
-    struct UniformBufferObject {
-        glm::mat4 model;
-        glm::mat4 view;
-        glm::mat4 proj;
-    };
+
 
     struct QueueFamilyIndices
     {
@@ -156,7 +165,6 @@ namespace ufox::graphics::vulkan {
 
         const uint16_t indices[12] {
             0, 1, 2, 2, 3, 0,
-            4, 5, 6, 6, 7, 4
         };
 
         Image textureImage{};
@@ -165,6 +173,8 @@ namespace ufox::graphics::vulkan {
         Buffer indexBuffer{};
         std::vector<Buffer> uniformBuffers;
         std::vector<uint8_t *> uniformBuffersMapped;
+        std::vector<Buffer> roundCornerBuffers;
+        std::vector<uint8_t *> roundCornerBuffersMapped;
 
         void createSwapchain(const windowing::sdl::UfoxWindow& window);
         void createDepthImage();
@@ -176,6 +186,7 @@ namespace ufox::graphics::vulkan {
         void createVertexBuffer();
         void createIndexBuffer();
         void createUniformBuffers();
+        void createRoundedCornerBuffer();
         void updateUniformBuffer(uint32_t currentImage) const;
         void createDescriptorPool();
         void createDescriptorSets();

@@ -1,6 +1,7 @@
 #include <fmt/core.h>
 #include <Windowing/ufox_windowing.hpp>
 #include <Engine/ufox_graphic.hpp>
+#include <Engine/ufox_inputSystem.hpp>
 
 
 int main() {
@@ -10,11 +11,15 @@ int main() {
         ufox::graphics::vulkan::GraphicsDevice gpu(window,
             "UFox Engine", vk::makeApiVersion(0, 1, 0,0),
             "UFox Application", vk::makeApiVersion(0,1,0,0));
+        ufox::InputSystem input{};
+
+
 
         window.show();
 
         SDL_Event event;
         bool running = true;
+        bool c {true};
 
         auto windowflag = SDL_GetWindowFlags(window.get());
         gpu.enableRender = !(windowflag & SDL_WINDOW_MINIMIZED) && !(windowflag & SDL_WINDOW_HIDDEN);
@@ -42,9 +47,29 @@ int main() {
                         gpu.enableRender = true;
                         break;
                     }
-                    default: ;
+                    case SDL_EVENT_MOUSE_MOTION: {
+                        input.EnabledMousePositionOutside(false);
+                        input.updateMousePositionInsideWindow();
+                        break;
+                    }
+                    case SDL_EVENT_WINDOW_FOCUS_LOST: {
+                        input.EnabledMousePositionOutside(false);
+                        break;
+                    }
+                    case SDL_EVENT_WINDOW_FOCUS_GAINED: {
+                        input.EnabledMousePositionOutside(true);
+                        break;
+                    }
+                    default: {
+                        if (event.motion.x == 0 || event.motion.y == 0) {
+                            input.EnabledMousePositionOutside(true);
+                        }
+
+                    }
                 }
             }
+
+            input.updateMousePositionOutsideWindow(window.get());
 
             gpu.drawFrame(window);
         }

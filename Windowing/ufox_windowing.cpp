@@ -20,8 +20,11 @@ namespace ufox::windowing::sdl
         SDL_GetDisplayUsableBounds(primary, &usableBounds);
 
         // Create window while ensuring proper cleanup on failure
+        // SDL_Window *rawWindow = SDL_CreateWindow(title.c_str(),
+        //     usableBounds.w - 4, usableBounds.h - 34, flags);
+
         SDL_Window *rawWindow = SDL_CreateWindow(title.c_str(),
-            usableBounds.w - 4, usableBounds.h - 34, flags);
+            800, 600, flags);
 
         if (!rawWindow) {
             throw SDLException("Failed to create window");
