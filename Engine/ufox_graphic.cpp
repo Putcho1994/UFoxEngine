@@ -704,7 +704,8 @@ namespace ufox::graphics::vulkan {
         params.borderRightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Green
         params.borderBottomColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Blue
         params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Yellow
-        // params.borderThickness = glm::vec4(5.0f, 15.0f, 10.0f, 4.0f); // Different thicknesses
+        // params.cornerRadius = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f); // Different radii for each corner
+        // params.borderThickness = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f); // Different thicknesses
         // params.borderTopColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f); // Red
         // params.borderRightColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f); // Green
         // params.borderBottomColor = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f); // Blue

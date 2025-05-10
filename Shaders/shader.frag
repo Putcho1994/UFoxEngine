@@ -54,23 +54,23 @@ void main() {
         borderCorner.x -= params.borderThickness.w; // Left thickness
     }
 
-    // Adjust inner corner radii based on border thickness
+    // Adjust inner corner radius based on border thickness
     vec4 adjustedCornerRadius = params.cornerRadius;
     if (pixelPos.y >= center.y) {
-        // Bottom half: reduce bottom-left and bottom-right radii
+        // Bottom half: reduce bottom-left and bottom-right radius
         adjustedCornerRadius.z = max(params.cornerRadius.z - params.borderThickness.z, 0.0); // Bottom-left
         adjustedCornerRadius.w = max(params.cornerRadius.w - params.borderThickness.z, 0.0); // Bottom-right
     } else {
-        // Top half: reduce top-left and top-right radii
+        // Top half: reduce top-left and top-right radius
         adjustedCornerRadius.x = max(params.cornerRadius.x - params.borderThickness.x, 0.0); // Top-left
         adjustedCornerRadius.y = max(params.cornerRadius.y - params.borderThickness.x, 0.0); // Top-right
     }
     if (pixelPos.x >= center.x) {
-        // Right half: reduce top-right and bottom-right radii
+        // Right half: reduce top-right and bottom-right radius
         adjustedCornerRadius.y = max(adjustedCornerRadius.y - params.borderThickness.y, 0.0); // Top-right
         adjustedCornerRadius.w = max(adjustedCornerRadius.w - params.borderThickness.y, 0.0); // Bottom-right
     } else {
-        // Left half: reduce top-left and bottom-left radii
+        // Left half: reduce top-left and bottom-left radius
         adjustedCornerRadius.x = max(adjustedCornerRadius.x - params.borderThickness.w, 0.0); // Top-left
         adjustedCornerRadius.z = max(adjustedCornerRadius.z - params.borderThickness.w, 0.0); // Bottom-left
     }
