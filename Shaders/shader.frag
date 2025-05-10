@@ -82,7 +82,7 @@ void main() {
     vec4 marginMask = white * smoothstep(-0.8, 0.0, backgroundDistance);
     vec4 backgroundMask = white * smoothstep(-0.8, 0.8, shapeDistance);
 
-    // Combine Fragcolor with textColor and borderColor
+    // Combine Fragcolor with textColor
     vec4 texColor = texture(texSampler, fragTexCoord);
     vec4 mainColorOpacity = vec4(lerp(black.rgb, white.rgb, fragColor.a), 1.0);
     float mainMask = mix(mainColorOpacity, black, backgroundMask).r;
