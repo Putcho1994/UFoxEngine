@@ -698,17 +698,18 @@ namespace ufox::graphics::vulkan {
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 
         RoundedRectParams params{};
-        params.cornerRadius = glm::vec4(20.0f, 20.0f, 20.0f, 20.0f); // Different radii for each corner
-        params.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f); // Different thicknesses
-        params.borderTopColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Red
-        params.borderRightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Green
-        params.borderBottomColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Blue
-        params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Yellow
-        // params.borderThickness = glm::vec4(5.0f, 15.0f, 10.0f, 4.0f); // Different thicknesses
-        // params.borderTopColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f); // Red
-        // params.borderRightColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f); // Green
-        // params.borderBottomColor = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f); // Blue
-        // params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // Yellow
+        // params.cornerRadius = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f);
+        // params.borderThickness = glm::vec4(5.0f, 5.0f, 5.0f, 5.0f);
+        // params.borderTopColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        // params.borderRightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        // params.borderBottomColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        // params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        params.cornerRadius = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f);
+        params.borderThickness = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f);
+        params.borderTopColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
+        params.borderRightColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);
+        params.borderBottomColor = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
+        params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
         memcpy(roundCornerBuffersMapped[currentImage], &params, sizeof(params));
 
