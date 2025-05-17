@@ -5,7 +5,9 @@
 #include "ufox_graphic.hpp"
 
 
-namespace ufox::graphics::vulkan {
+
+
+namespace ufox::gpu::vulkan {
     uint32_t FindMemoryType(const vk::PhysicalDeviceMemoryProperties &memoryProperties, uint32_t typeBits,
                             vk::MemoryPropertyFlags requirementsMask){
         auto typeIndex = static_cast<uint32_t>(~0);
@@ -236,17 +238,6 @@ namespace ufox::graphics::vulkan {
 
         createSwapchain(window);
         createDepthImage();
-        createDescriptorSetLayout();
-        createGraphicsPipeline();
-        createTextureImage();
-        createTextureImageView();
-        createTextureSampler();
-        createVertexBuffer();
-        createIndexBuffer();
-        createUniformBuffers();
-        createRoundedCornerBuffer();
-        createDescriptorPool();
-        createDescriptorSets();
     }
 
     void GraphicsDevice::waitForIdle() const {
@@ -386,402 +377,6 @@ namespace ufox::graphics::vulkan {
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eDepthStencilAttachmentOptimal
         );
-    }
-
-
-    void GraphicsDevice::createDescriptorSetLayout() {
-        vk::DescriptorSetLayoutBinding vertexLayoutBinding{};
-        vertexLayoutBinding.setBinding(0)
-            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-            .setDescriptorCount(1)
-            .setStageFlags(vk::ShaderStageFlagBits::eVertex)
-            .setPImmutableSamplers(nullptr);
-
-        vk::DescriptorSetLayoutBinding samplerLayoutBinding{};
-        samplerLayoutBinding.setBinding(1)
-                            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                            .setDescriptorCount(1)
-                            .setStageFlags(vk::ShaderStageFlagBits::eFragment)
-                            .setPImmutableSamplers(nullptr);
-
-        vk::DescriptorSetLayoutBinding roundedCornerLayoutBinding{};
-        roundedCornerLayoutBinding.setBinding(2)
-                                  .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                                  .setDescriptorCount(1)
-                                  .setStageFlags(vk::ShaderStageFlagBits::eFragment)
-                                  .setPImmutableSamplers(nullptr);
-
-        std::array bindings = { vertexLayoutBinding, samplerLayoutBinding, roundedCornerLayoutBinding };
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.setBindingCount( bindings.size())
-                  .setPBindings(bindings.data());
-
-        descriptorSetLayout.emplace(*device, layoutInfo);
-    }
-
-    void GraphicsDevice::createGraphicsPipeline() {
-        auto vertCode = loadShader("shaders/shader.vert.spv");
-        auto fragCode = loadShader("shaders/shader.frag.spv");
-        vk::raii::ShaderModule vertModule(*device, vk::ShaderModuleCreateInfo{ {}, vertCode.size(), reinterpret_cast<const uint32_t*>(vertCode.data()) });
-        vk::raii::ShaderModule fragModule(*device, vk::ShaderModuleCreateInfo{ {}, fragCode.size(), reinterpret_cast<const uint32_t*>(fragCode.data()) });
-
-        std::array stages = {
-            vk::PipelineShaderStageCreateInfo{ {}, vk::ShaderStageFlagBits::eVertex, *vertModule, "main" },
-            vk::PipelineShaderStageCreateInfo{ {}, vk::ShaderStageFlagBits::eFragment, *fragModule, "main" }
-        };
-
-        vk::PipelineVertexInputStateCreateInfo vertexInput{};
-
-        vk::VertexInputBindingDescription bindingDescription{};
-        bindingDescription.setBinding(0)
-                          .setStride(sizeof(Vertex))
-                          .setInputRate(vk::VertexInputRate::eVertex);
-
-        std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions{};
-        attributeDescriptions[0].setBinding(0)
-                                .setLocation(0)
-                                .setFormat(vk::Format::eR32G32B32Sfloat)
-                                .setOffset(0);
-
-        attributeDescriptions[1].setBinding(0)
-                                .setLocation(1)
-                                .setFormat(vk::Format::eR32G32B32A32Sfloat)
-                                .setOffset(offsetof(Vertex, color));
-
-        attributeDescriptions[2].setBinding(0)
-                                .setLocation(2)
-                                .setFormat(vk::Format::eR32G32Sfloat)
-                                .setOffset(offsetof(Vertex, texCoord));
-
-        vertexInput.setVertexBindingDescriptionCount(1)
-                   .setVertexAttributeDescriptionCount( attributeDescriptions.size())
-                   .setPVertexBindingDescriptions(&bindingDescription)
-                   .setPVertexAttributeDescriptions(attributeDescriptions.data());
-
-
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-        inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList)
-                     .setPrimitiveRestartEnable(false);
-
-        vk::PipelineViewportStateCreateInfo viewportState{};
-        viewportState.setViewportCount(1).setScissorCount(1);
-
-        vk::PipelineRasterizationStateCreateInfo rasterizer{};
-        rasterizer.setPolygonMode(vk::PolygonMode::eFill)
-                  .setDepthBiasEnable(false)
-                  .setDepthClampEnable(false)
-                  .setRasterizerDiscardEnable(false)
-                  .setLineWidth(1.0f);
-
-        vk::PipelineMultisampleStateCreateInfo multisample{};
-        multisample.setRasterizationSamples(vk::SampleCountFlagBits::e1);
-
-        vk::PipelineColorBlendAttachmentState blendAttachment{};
-        blendAttachment.setBlendEnable(true)
-                       .setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha) // Use alpha for color
-                       .setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha) // 1 - alpha for background
-                       .setColorBlendOp(vk::BlendOp::eAdd) // Add blended colors
-                       .setSrcAlphaBlendFactor(vk::BlendFactor::eOne) // Preserve alpha
-                       .setDstAlphaBlendFactor(vk::BlendFactor::eZero)
-                       .setAlphaBlendOp(vk::BlendOp::eAdd)
-                       .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
-
-        vk::PipelineColorBlendStateCreateInfo blendState{};
-        blendState.setAttachmentCount(1).setPAttachments(&blendAttachment);
-
-        std::array dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eCullMode,
-                                     vk::DynamicState::eFrontFace, vk::DynamicState::ePrimitiveTopology };
-        vk::PipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.setDynamicStateCount(dynamicStates.size()).setPDynamicStates(dynamicStates.data());
-
-        vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.setSetLayoutCount(1)
-        .setPSetLayouts(&**descriptorSetLayout);
-
-        pipelineLayout.emplace(*device, pipelineLayoutInfo);
-
-        vk::PipelineRenderingCreateInfo renderingInfo{};
-        renderingInfo.setColorAttachmentCount(1)
-                     .setPColorAttachmentFormats(&swapchainFormat)
-                     .setDepthAttachmentFormat(depthImage.format);
-
-        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.setDepthTestEnable(true)
-               .setDepthWriteEnable(true)
-               .setDepthCompareOp(vk::CompareOp::eLess)
-               .setDepthBoundsTestEnable(false)
-               .setStencilTestEnable(false);
-
-        vk::GraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.setStageCount(stages.size())
-                    .setPStages(stages.data())
-                    .setPVertexInputState(&vertexInput)
-                    .setPInputAssemblyState(&inputAssembly)
-                    .setPViewportState(&viewportState)
-                    .setPRasterizationState(&rasterizer)
-                    .setPMultisampleState(&multisample)
-                    .setPColorBlendState(&blendState)
-                    .setPDynamicState(&dynamicState)
-                    .setPDepthStencilState(&depthStencil)
-                    .setLayout(**pipelineLayout)
-                    .setRenderPass(nullptr)
-                    .setSubpass(0)
-                    .setPNext(&renderingInfo);
-
-
-        graphicsPipeline.emplace(*device, nullptr, pipelineInfo);
-    }
-
-    void GraphicsDevice::createTextureImage() {
-        const std::string filename = "Contents/statue-1275469_1280.jpg";
-        std::string path = SDL_GetBasePath() + filename;
-
-        std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> rawSurface
-        {IMG_Load(path.c_str()), SDL_DestroySurface};
-        if (!rawSurface)
-            throw std::runtime_error(std::string("Failed to load texture: ") + SDL_GetError());
-
-        std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> convSurface
-        {SDL_ConvertSurface(rawSurface.get(), SDL_PIXELFORMAT_ABGR8888), SDL_DestroySurface};
-        if (!convSurface)
-            throw std::runtime_error(std::string("Failed to convert texture: ") + SDL_GetError());
-
-        textureImage.format = vk::Format::eR8G8B8A8Srgb;
-        textureImage.extent = vk::Extent2D{static_cast<uint32_t>(convSurface->w), static_cast<uint32_t>(convSurface->h)};
-        vk::DeviceSize imageSize = textureImage.extent.width * textureImage.extent.height * 4;
-
-        Buffer stagingBuffer{};
-        createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer);
-
-        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, imageSize ) );
-        memcpy( pData, convSurface->pixels,  imageSize);
-        stagingBuffer.memory->unmapMemory();
-
-        createImage(vk::ImageTiling::eOptimal,vk::ImageUsageFlagBits::eTransferDst|vk::ImageUsageFlagBits::eSampled,
-        vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage);
-
-        transitionImageLayout(textureImage,vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-        copyBufferToImage(stagingBuffer, textureImage);
-        transitionImageLayout(textureImage,vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-    }
-
-    void GraphicsDevice::createTextureImageView() {
-        vk::ImageViewCreateInfo viewInfo{};
-        viewInfo.setImage(*textureImage.data)
-                .setViewType(vk::ImageViewType::e2D)
-                .setFormat(textureImage.format)
-                .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
-
-        textureImage.view.emplace(*device, viewInfo);
-    }
-
-    void GraphicsDevice::createTextureSampler() {
-
-        vk::PhysicalDeviceProperties deviceProperties = physicalDevice->getProperties();
-
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.setMagFilter(vk::Filter::eLinear)
-                    .setMinFilter(vk::Filter::eLinear)
-                    .setAddressModeU(vk::SamplerAddressMode::eRepeat)
-                    .setAddressModeV(vk::SamplerAddressMode::eRepeat)
-                    .setAddressModeW(vk::SamplerAddressMode::eRepeat)
-                    .setMipmapMode(vk::SamplerMipmapMode::eLinear)
-                    .setBorderColor(vk::BorderColor::eFloatOpaqueWhite)
-                    .setAnisotropyEnable(true)
-                    .setMaxAnisotropy(deviceProperties.limits.maxSamplerAnisotropy)
-                    .setBorderColor(vk::BorderColor::eFloatOpaqueWhite)
-                    .setUnnormalizedCoordinates(false)
-                    .setCompareEnable(false)
-                    .setCompareOp(vk::CompareOp::eAlways)
-                    .setMinLod(0.0f)
-                    .setMaxLod(0.0f)
-                    .setMipLodBias(0.0f);
-
-        textureSampler.emplace(*device, samplerInfo);
-    }
-
-    void GraphicsDevice::createVertexBuffer() {
-        vk::DeviceSize bufferSize = sizeof(TestRect);
-
-        Buffer stagingBuffer{};
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer);
-
-        // copy the vertex and color data into that device memory
-        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, TestRect, bufferSize );
-        stagingBuffer.memory->unmapMemory();
-
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eVertexBuffer,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-            vertexBuffer);
-
-        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-    }
-
-    void GraphicsDevice::createIndexBuffer() {
-        vk::DeviceSize bufferSize = sizeof(indices);
-
-        Buffer stagingBuffer{};
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer);
-
-        // copy the vertex and color data into that device memory
-        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, bufferSize ) );
-        memcpy( pData, indices, bufferSize );
-        stagingBuffer.memory->unmapMemory();
-
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eIndexBuffer,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-            indexBuffer);
-
-        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
-    }
-
-    void GraphicsDevice::createUniformBuffers() {
-        constexpr vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-
-        uniformBuffers.reserve(MAX_FRAMES_IN_FLIGHT); // Create elements
-        uniformBuffersMapped.reserve(MAX_FRAMES_IN_FLIGHT);
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            Buffer buffer{};
-
-            createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                buffer);
-
-            if (!buffer.memory) {
-                throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
-            }
-            auto mapped = static_cast<uint8_t *>(buffer.memory->mapMemory(0, bufferSize));
-            uniformBuffers.emplace_back(std::move(buffer));
-            uniformBuffersMapped.emplace_back(mapped);
-        }
-    }
-
-    void GraphicsDevice::createRoundedCornerBuffer() {
-         constexpr vk::DeviceSize bufferSize = sizeof(RoundedRectParams);
-
-        roundCornerBuffers.reserve(MAX_FRAMES_IN_FLIGHT); // Create elements
-        roundCornerBuffersMapped.reserve(MAX_FRAMES_IN_FLIGHT);
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            Buffer buffer{};
-
-            createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                buffer);
-
-            if (!buffer.memory) {
-                throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
-            }
-            auto mapped = static_cast<uint8_t *>(buffer.memory->mapMemory(0, bufferSize));
-            roundCornerBuffers.emplace_back(std::move(buffer));
-            roundCornerBuffersMapped.emplace_back(mapped);
-        }
-    }
-
-    void GraphicsDevice::updateUniformBuffer(uint32_t currentImage) const {
-        UniformBufferObject ubo{};
-        ubo.model = glm::translate(glm::mat4(1.0f), glm::vec3(0+10, 0+10, 0.0f)) *
-                            glm::scale(glm::mat4(1.0f), glm::vec3(swapchainExtent.width -20, swapchainExtent.height-20, 100));
-        ubo.view = glm::mat4(1.0f);
-        ubo.proj = glm::ortho(
-        0.0f, static_cast<float>(swapchainExtent.width),
-        0.0f, static_cast<float>(swapchainExtent.height), // Swap bottom and top
-        -1.0f, 1.0f);
-
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-
-        RoundedRectParams params{};
-        // params.cornerRadius = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f);
-        // params.borderThickness = glm::vec4(5.0f, 5.0f, 5.0f, 5.0f);
-        // params.borderTopColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        // params.borderRightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        // params.borderBottomColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        // params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        params.cornerRadius = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f);
-        params.borderThickness = glm::vec4(18.0f, 18.0f, 18.0f, 18.0f);
-        params.borderTopColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
-        params.borderRightColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);
-        params.borderBottomColor = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-        params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-
-        memcpy(roundCornerBuffersMapped[currentImage], &params, sizeof(params));
-
-    }
-
-    void GraphicsDevice::createDescriptorPool() {
-        std::array<vk::DescriptorPoolSize, 3> poolSize{};
-        poolSize[0].setType(vk::DescriptorType::eUniformBuffer)
-                   .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
-        poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler)
-                   .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
-        poolSize[2].setType(vk::DescriptorType::eUniformBuffer)
-                   .setDescriptorCount(MAX_FRAMES_IN_FLIGHT);
-
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.setPoolSizeCount(poolSize.size())
-                .setPPoolSizes(poolSize.data())
-                .setMaxSets(MAX_FRAMES_IN_FLIGHT)
-                .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
-
-        descriptorPool.emplace(*device, poolInfo);
-    }
-
-    void GraphicsDevice::createDescriptorSets() {
-        std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.setDescriptorPool(*descriptorPool)
-                 .setDescriptorSetCount(MAX_FRAMES_IN_FLIGHT)
-                 .setPSetLayouts(layouts.data());
-
-        descriptorSets.reserve(MAX_FRAMES_IN_FLIGHT);
-        descriptorSets = device->allocateDescriptorSets(allocInfo);
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vk::DescriptorBufferInfo bufferInfo{};
-            bufferInfo.setBuffer(*uniformBuffers[i].data)
-                      .setOffset(0)
-                      .setRange(sizeof(UniformBufferObject));
-
-            vk::DescriptorImageInfo imageInfo{};
-            imageInfo.setImageView(*textureImage.view)
-                     .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
-                     .setSampler(*textureSampler);
-
-            vk::DescriptorBufferInfo roundCornerInfo{};
-            roundCornerInfo.setBuffer(*roundCornerBuffers[i].data)
-                           .setOffset(0)
-                           .setRange(sizeof(RoundedRectParams));
-
-
-            std::array<vk::WriteDescriptorSet,3> write{};
-            write[0].setDstSet(*descriptorSets[i])
-                    .setDstBinding(0)
-                    .setDstArrayElement(0)
-                    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                    .setDescriptorCount(1)
-                    .setPBufferInfo(&bufferInfo);
-            write[1].setDstSet(*descriptorSets[i])
-                    .setDstBinding(1)
-                    .setDstArrayElement(0)
-                    .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                    .setDescriptorCount(1)
-                    .setPImageInfo(&imageInfo);
-            write[2].setDstSet(*descriptorSets[i])
-                    .setDstBinding(2)
-                    .setDstArrayElement(0)
-                    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                    .setDescriptorCount(1)
-                    .setPBufferInfo(&roundCornerInfo);
-
-            device->updateDescriptorSets(write, nullptr);
-        }
     }
 
     void GraphicsDevice::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
@@ -935,51 +530,48 @@ namespace ufox::graphics::vulkan {
         throw std::runtime_error("failed to find supported format!");
     }
 
-    void GraphicsDevice::recreateSwapchain(const windowing::sdl::UfoxWindow& window) {
-        waitForIdle();
-        depthImage.clear();
-        swapchainImageViews.clear();
-        swapchain.reset();
-        createSwapchain(window);
-        createDepthImage();
-    }
+    const vk::raii::CommandBuffer* GraphicsDevice::beginFrame(const windowing::sdl::UfoxWindow &window) {
 
-    void GraphicsDevice::drawFrame(const windowing::sdl::UfoxWindow& window) {
-        if (!enableRender) return;
-
-        [[maybe_unused]] auto waitResult = device->waitForFences(*inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        auto waitResult = device->waitForFences(*inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        device->resetFences(*inFlightFences[currentFrame]);
 
         auto [result, imageIndex] = swapchain->acquireNextImage(UINT64_MAX, *imageAvailableSemaphores[currentFrame], nullptr);
         currentImage = imageIndex;
 
         if (result == vk::Result::eErrorOutOfDateKHR) {
             recreateSwapchain(window);
-            return;
+            return nullptr;
         }
 
         if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
             throw std::runtime_error("Failed to acquire swapchain image");
         }
 
-        device->resetFences(*inFlightFences[currentFrame]);
-        vk::raii::CommandBuffer& cmd = commandBuffers[currentFrame];
-        cmd.reset();
+        isFrameStarted = true;
 
+        const vk::raii::CommandBuffer& cmd = commandBuffers[currentFrame];
+        cmd.reset();
         vk::CommandBufferBeginInfo beginInfo{};
         cmd.begin(beginInfo);
 
-        TransitionImageLayout(cmd, swapchainImages[imageIndex], swapchainFormat,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
-            vk::AccessFlagBits2::eNone, vk::AccessFlagBits2::eColorAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+        return &cmd;
+    }
+
+    void GraphicsDevice::beginDynamicRendering(const vk::raii::CommandBuffer &cmd) const{
+        if (!isFrameStarted) return;
+
+        TransitionImageLayout(cmd, swapchainImages[currentImage], swapchainFormat,
+             vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
+             vk::AccessFlagBits2::eNone, vk::AccessFlagBits2::eColorAttachmentWrite,
+             vk::PipelineStageFlagBits2::eTopOfPipe, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
 
 
         vk::RenderingAttachmentInfo colorAttachment{};
-        colorAttachment.setImageView(*swapchainImageViews[imageIndex])
+        colorAttachment.setImageView(*swapchainImageViews[currentImage])
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setLoadOp(vk::AttachmentLoadOp::eClear)
             .setStoreOp(vk::AttachmentStoreOp::eStore)
-            .setClearValue({ std::array{0.2f, 0.2f, 0.2f, 1.0f} });
+            .setClearValue({std::array{0.0f, 0.0f, 0.0f, 1.0f}});
 
         vk::RenderingAttachmentInfo depthAttachment{};
         depthAttachment.setImageView(*depthImage.view)
@@ -997,39 +589,23 @@ namespace ufox::graphics::vulkan {
             .setPDepthAttachment(&depthAttachment);
 
         cmd.beginRendering(renderingInfo);
+    }
 
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
-
-        cmd.setViewport(0, vk::Viewport{ 0.0f, 0.0f, static_cast<float>(swapchainExtent.width), static_cast<float>(swapchainExtent.height), 0.0f, 1.0f });
-        cmd.setScissor(0, vk::Rect2D{ {0, 0}, swapchainExtent });
-        cmd.setCullMode(vk::CullModeFlagBits::eNone);
-        cmd.setFrontFace(vk::FrontFace::eClockwise);
-        cmd.setPrimitiveTopology(vk::PrimitiveTopology::eTriangleList);
-
-        // cmd.clearColorImage(swapchainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ClearColorValue{0.023f,0.033f,0.033f,1.0f},
-        //             vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0,1,0,1});
-
-        vk::Buffer vertexBuffers[] = {*vertexBuffer.data};
-        vk::DeviceSize offsets[] = {0};
-
-        cmd.bindVertexBuffers( 0, vertexBuffers, offsets );
-        cmd.bindIndexBuffer( *indexBuffer.data, 0, vk::IndexType::eUint16 );
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descriptorSets[currentFrame], nullptr);
-
-        cmd.drawIndexed(static_cast<uint32_t>(std::size(indices)), 1, 0, 0, 0);
+    void GraphicsDevice::endDynamicRendering(const vk::raii::CommandBuffer &cmd) const {
+        if (!isFrameStarted) return;
 
         cmd.endRendering();
 
-        TransitionImageLayout(cmd, swapchainImages[imageIndex], swapchainFormat,
+        TransitionImageLayout(cmd, swapchainImages[currentImage], swapchainFormat,
             vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
             vk::AccessFlagBits2::eColorAttachmentWrite, vk::AccessFlagBits2::eNone,
             vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
+    }
 
-
+    void GraphicsDevice::endFrame(const vk::raii::CommandBuffer &cmd, const windowing::sdl::UfoxWindow &window){
+        if (!isFrameStarted) return;
 
         cmd.end();
-
-        updateUniformBuffer(currentFrame);
 
         vk::SubmitInfo submitInfo{};
         vk::PipelineStageFlags waitStage{ vk::PipelineStageFlagBits::eTopOfPipe }; // Fixed from TopOfPipe
@@ -1037,7 +613,7 @@ namespace ufox::graphics::vulkan {
             .setPWaitSemaphores(&(*imageAvailableSemaphores[currentFrame]))
             .setPWaitDstStageMask(&waitStage)
             .setCommandBufferCount(1)
-            .setPCommandBuffers(&(*cmd))
+            .setPCommandBuffers(&*cmd)
             .setSignalSemaphoreCount(1)
             .setPSignalSemaphores(&(*renderFinishedSemaphores[currentFrame]));
 
@@ -1048,7 +624,7 @@ namespace ufox::graphics::vulkan {
             .setPWaitSemaphores(&*renderFinishedSemaphores[currentFrame])
             .setSwapchainCount(1)
             .setPSwapchains(&**swapchain)
-            .setPImageIndices(&imageIndex);
+            .setPImageIndices(&currentImage);
 
         vk::Result presentResult = presentQueue->presentKHR(presentInfo);
         if (presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR) {
@@ -1058,7 +634,23 @@ namespace ufox::graphics::vulkan {
             throw std::runtime_error("Failed to present swapchain image");
         }
 
+        isFrameStarted = false;
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void GraphicsDevice::changeBackgroundColor(const vk::raii::CommandBuffer &cmd, const glm::vec4 &color) const {
+
+        cmd.clearColorImage(swapchainImages[currentImage], vk::ImageLayout::eUndefined, vk::ClearColorValue{color.r,color.g,color.b,color.a},
+                     vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0,1,0,1});
+    }
+
+    void GraphicsDevice::recreateSwapchain(const windowing::sdl::UfoxWindow& window) {
+        waitForIdle();
+        depthImage.clear();
+        swapchainImageViews.clear();
+        swapchain.reset();
+        createSwapchain(window);
+        createDepthImage();
     }
 }
 

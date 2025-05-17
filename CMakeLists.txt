@@ -8,6 +8,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 
+
+
+
+
 # Add a custom command to create the Contents folder and copy its contents
 add_custom_command(
         OUTPUT "${CMAKE_SOURCE_DIR}/bin/Contents"

@@ -1,0 +1,44 @@
+//
+// Created by b-boy on 17.05.2025.
+//
+#pragma once
+
+#include <glm/glm.hpp>
+#include <vulkan/vulkan_raii.hpp>
+#include <vector>
+
+namespace ufox::core {
+
+    struct Rect {
+        float x;
+        float y;
+        float width;
+        float height;
+    };
+
+    struct TransformerMatrix {
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 proj;
+    };
+
+    constexpr vk::DeviceSize RECT_BUFFER_SIZE = sizeof(Rect);
+    constexpr vk::DeviceSize TRANSFORM_BUFFER_SIZE = sizeof(TransformerMatrix);
+
+    static std::vector<char> loadShader(const std::string& filename) {
+        std::string path = SDL_GetBasePath() + filename;
+        std::ifstream file(path, std::ios::ate | std::ios::binary);
+        if (!file.is_open()) throw std::runtime_error("Failed to open shader: " + path);
+
+        size_t size = file.tellg();
+        if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+            throw std::runtime_error("File size exceeds maximum streamsize limit");
+        }
+
+        std::vector<char> buffer(size);
+        file.seekg(0);
+        file.read(buffer.data(), static_cast<std::streamsize>(size));
+        file.close();
+        return buffer;
+    }
+}

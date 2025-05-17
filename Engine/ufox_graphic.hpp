@@ -21,7 +21,7 @@
 #include <chrono>
 
 
-namespace ufox::graphics {
+namespace ufox::gpu {
 
     struct Vertex {
         glm::vec3 position;
@@ -43,18 +43,10 @@ namespace ufox::graphics {
         glm::mat4 proj;
     };
 
-    struct RoundedRectParams {
-        glm::vec4 cornerRadius;       // x: top-left, y: top-right, z: bottom-left, w: bottom-right
-        glm::vec4 borderThickness;   // x: top, y: right, z: bottom, w: left
-        glm::vec4 borderTopColor;
-        glm::vec4 borderRightColor;
-        glm::vec4 borderBottomColor;
-        glm::vec4 borderLeftColor;
 
-    };
 }
 
-namespace ufox::graphics::vulkan {
+namespace ufox::gpu::vulkan {
 
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -109,11 +101,10 @@ namespace ufox::graphics::vulkan {
         GraphicsDevice(GraphicsDevice&&) = delete;
         GraphicsDevice& operator=(GraphicsDevice&&) = delete;
 
-        bool useVsync{true};
+        bool useVsync{false};
         bool enableRender{true};
 
         void recreateSwapchain(const windowing::sdl::UfoxWindow& window);
-        void drawFrame(const windowing::sdl::UfoxWindow& window);
         void waitForIdle() const;
 
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, Buffer& buffer);
@@ -125,6 +116,22 @@ namespace ufox::graphics::vulkan {
         void transitionImageLayout(const Image& image,vk::ImageLayout oldLayout, vk::ImageLayout newLayout) const;
         void copyBufferToImage(const Buffer &buffer, const Image &image) const;
         [[nodiscard]] vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) const;
+
+        const vk::raii::CommandBuffer* beginFrame(const windowing::sdl::UfoxWindow &window);
+        void beginDynamicRendering(const vk::raii::CommandBuffer& cmd) const;
+        void endDynamicRendering(const vk::raii::CommandBuffer& cmd) const;
+        void endFrame(const vk::raii::CommandBuffer& cmd, const windowing::sdl::UfoxWindow &window) ;
+
+        void changeBackgroundColor(const vk::raii::CommandBuffer& cmd,const glm::vec4& color) const;
+
+        const vk::raii::Device& getDevice() const{return *device;}
+        const vk::raii::PhysicalDevice& getPhysicalDevice() const{return *physicalDevice;}
+        const vk::Extent2D& getSwapchainExtent() const { return swapchainExtent; }
+        const vk::Format& getSwapchainFormat() const { return swapchainFormat; }
+        const vk::Format& getDepthFormat() const { return depthImage.format; }
+
+        const uint32_t& getCurrentFrame() const { return currentFrame; }
+        const uint32_t& getCurrentImage() const { return currentImage; }
 
     private:
         //Instance properties
@@ -152,9 +159,7 @@ namespace ufox::graphics::vulkan {
 
         Image depthImage{};
 
-        std::optional<vk::raii::DescriptorSetLayout> descriptorSetLayout{};
-        std::optional<vk::raii::PipelineLayout> pipelineLayout{};
-        std::optional<vk::raii::Pipeline> graphicsPipeline{};
+
         std::optional<vk::raii::DescriptorPool> descriptorPool{};
         std::vector<vk::raii::DescriptorSet> descriptorSets;
 
@@ -162,34 +167,17 @@ namespace ufox::graphics::vulkan {
         uint32_t currentImage{ 0 };
 
 
-
-        const uint16_t indices[12] {
-            0, 1, 2, 2, 3, 0,
-        };
-
         Image textureImage{};
         std::optional<vk::raii::Sampler> textureSampler{};
-        Buffer vertexBuffer{};
-        Buffer indexBuffer{};
-        std::vector<Buffer> uniformBuffers;
-        std::vector<uint8_t *> uniformBuffersMapped;
-        std::vector<Buffer> roundCornerBuffers;
-        std::vector<uint8_t *> roundCornerBuffersMapped;
+
+
+        bool isFrameStarted{false};
 
         void createSwapchain(const windowing::sdl::UfoxWindow& window);
         void createDepthImage();
-        void createDescriptorSetLayout();
-        void createGraphicsPipeline();
-        void createTextureImage();
-        void createTextureImageView();
-        void createTextureSampler();
-        void createVertexBuffer();
-        void createIndexBuffer();
-        void createUniformBuffers();
-        void createRoundedCornerBuffer();
-        void updateUniformBuffer(uint32_t currentImage) const;
-        void createDescriptorPool();
-        void createDescriptorSets();
+
+
+
     };
 
 }
