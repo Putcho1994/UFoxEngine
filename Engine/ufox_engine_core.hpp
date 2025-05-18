@@ -9,21 +9,26 @@
 
 namespace ufox::core {
 
-    struct Rect {
+    struct TransformRect {
         float x;
         float y;
         float width;
         float height;
+
+        [[nodiscard]] glm::mat4 getMatrix() const {
+            return glm::translate(glm::mat4(1.0f), glm::vec3(x, y, 0.0f)) *
+                   glm::scale(glm::mat4(1.0f), glm::vec3(width, height, 1.0f));
+        }
     };
 
-    struct TransformerMatrix {
+    struct TransformMatrix {
         glm::mat4 model;
         glm::mat4 view;
         glm::mat4 proj;
     };
 
-    constexpr vk::DeviceSize RECT_BUFFER_SIZE = sizeof(Rect);
-    constexpr vk::DeviceSize TRANSFORM_BUFFER_SIZE = sizeof(TransformerMatrix);
+    constexpr vk::DeviceSize RECT_BUFFER_SIZE = sizeof(TransformRect);
+    constexpr vk::DeviceSize TRANSFORM_BUFFER_SIZE = sizeof(TransformMatrix);
 
     static std::vector<char> loadShader(const std::string& filename) {
         std::string path = SDL_GetBasePath() + filename;

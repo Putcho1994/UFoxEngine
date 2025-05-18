@@ -45,6 +45,13 @@ int main() {
                         running = false;
                         break;
                     }
+                    case  SDL_EVENT_WINDOW_RESIZED: {
+                        fmt::println("Window resized");
+                    }
+                    case SDL_EVENT_WINDOW_MOVED:{
+
+                        fmt::println("Window moved");
+                        }
                     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
                         window.updateSize();
                         auto [w, h] = window.getSize();
@@ -65,6 +72,7 @@ int main() {
                         input.EnabledMousePositionOutside(false);
                         input.updateMousePositionInsideWindow();
                         gui.update();
+                        fmt::println("mm");
                         break;
                     }
                     case SDL_EVENT_WINDOW_FOCUS_LOST: {
