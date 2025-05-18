@@ -17,7 +17,7 @@ int main() {
         ufox::gui::GUI gui(gpu);
 
         ufox::gui::GUIStyle params{};
-        params.cornerRadius = glm::vec4(10.0f, 10.0f, 10.0f, 10.0f);
+        params.cornerRadius = glm::vec4(40.0f, 40.0f, 40.0f, 40.0f);
         params.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f);
         params.borderTopColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
         params.borderRightColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);

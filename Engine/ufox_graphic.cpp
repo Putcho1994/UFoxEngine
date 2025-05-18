@@ -571,7 +571,7 @@ namespace ufox::gpu::vulkan {
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setLoadOp(vk::AttachmentLoadOp::eClear)
             .setStoreOp(vk::AttachmentStoreOp::eStore)
-            .setClearValue({std::array{0.0f, 0.0f, 0.0f, 1.0f}});
+            .setClearValue({std::array{0.5f, 0.5f, 0.5f, 1.0f}});
 
         vk::RenderingAttachmentInfo depthAttachment{};
         depthAttachment.setImageView(*depthImage.view)
