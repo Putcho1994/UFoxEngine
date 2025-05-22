@@ -3,6 +3,7 @@
 #include <Engine/ufox_graphic.hpp>
 #include <Engine/ufox_inputSystem.hpp>
 #include <Engine/ufox_gui.hpp>
+#include <Engine/ufox_panel.hpp>
 
 
 int main() {
@@ -16,6 +17,11 @@ int main() {
 
         ufox::gui::GUI gui(gpu);
 
+        ufox::Panel mainPanel{};
+        mainPanel.rootElement.style.backgroundColor = {0.11f, 0.11f, 0.11f, 1.0f};
+
+
+        gui.elements.push_back(&mainPanel.rootElement);
 
         gui.init();
 
@@ -36,19 +42,12 @@ int main() {
                         running = false;
                         break;
                     }
-                    case  SDL_EVENT_WINDOW_RESIZED: {
-                        fmt::println("Window resized");
-                    }
-                    case SDL_EVENT_WINDOW_MOVED:{
-
-                        fmt::println("Window moved");
-                        }
                     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
                         window.updateSize();
                         auto [w, h] = window.getSize();
-                        fmt::println("Window resized: {}x{}", w, h);
-                        gpu.recreateSwapchain(window);
 
+                        gpu.recreateSwapchain(window);
+                        mainPanel.onResize(glm::vec2(w, h));
                         break;
                     }
                     case SDL_EVENT_WINDOW_MINIMIZED: {

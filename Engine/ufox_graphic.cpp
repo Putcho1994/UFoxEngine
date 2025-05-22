@@ -58,22 +58,7 @@ namespace ufox::gpu::vulkan {
         cmd.pipelineBarrier2(dependency);
     }
 
-    std::vector<char> loadShader(const std::string& filename){
-        std::string path = SDL_GetBasePath() + filename;
-        std::ifstream file(path, std::ios::ate | std::ios::binary);
-        if (!file.is_open()) throw std::runtime_error("Failed to open shader: " + path);
 
-        size_t size = file.tellg();
-        if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
-            throw std::runtime_error("File size exceeds maximum streamsize limit");
-        }
-
-        std::vector<char> buffer(size);
-        file.seekg(0);
-        file.read(buffer.data(), static_cast<std::streamsize>(size));
-        file.close();
-        return buffer;
-    }
 
     bool AreExtensionsSupported( const std::vector<const char *> &required, const std::vector<vk::ExtensionProperties> &available) {
         for (const auto* req : required) {
@@ -252,7 +237,7 @@ namespace ufox::gpu::vulkan {
         auto formats = physicalDevice->getSurfaceFormatsKHR(*surface);
         vk::SurfaceFormatKHR surfaceFormat;
         for (const auto& format : formats) {
-            if (format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            if (format.format == vk::Format::eB8G8R8A8Unorm && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
                 surfaceFormat = format;
         }
         swapchainFormat = surfaceFormat.format;
@@ -465,7 +450,7 @@ namespace ufox::gpu::vulkan {
            .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
            .setImage(*image.data)
            .setSubresourceRange({
-               image.format == vk::Format::eR8G8B8A8Srgb ? vk::ImageAspectFlagBits::eColor :
+               image.format == vk::Format::eR8G8B8A8Srgb || image.format == vk::Format::eR8G8B8A8Unorm ? vk::ImageAspectFlagBits::eColor :
                image.format == vk::Format::eD32Sfloat ? vk::ImageAspectFlagBits::eDepth :
                    vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
                0, 1, 0, 1

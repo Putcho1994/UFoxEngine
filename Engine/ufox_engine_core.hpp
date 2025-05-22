@@ -3,8 +3,12 @@
 //
 #pragma once
 
+#include <fstream>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan_raii.hpp>
+#include <SDL3/SDL_filesystem.h>
+
 #include <vector>
 
 namespace ufox::core {

@@ -14,8 +14,8 @@
 #include <SDL3/SDL_vulkan.h>
 #include <SDL3_image/SDL_image.h>
 #include <vulkan/vulkan_raii.hpp>
-#include <fstream>
-#include "Windowing/ufox_windowing.hpp"
+
+#include <Windowing/ufox_windowing.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -57,7 +57,7 @@ namespace ufox::gpu::vulkan {
             vk::AccessFlags2 srcAccess, vk::AccessFlags2 dstAccess,
             vk::PipelineStageFlags2 srcStage, vk::PipelineStageFlags2 dstStage);
 
-    static std::vector<char> loadShader(const std::string& filename);
+
 
     struct Image {
         std::optional<vk::raii::Image> data{};

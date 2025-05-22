@@ -75,8 +75,8 @@ namespace ufox::gui {
         ~GUI() = default;
 
 
-        void addStyle(const std::string& name, const GUIStyle& style);
 
+        std::vector<GUIElement*> elements;
         void init();
         void update() const;
         void draw(const vk::raii::CommandBuffer& cmd) const;
@@ -94,16 +94,6 @@ namespace ufox::gui {
         gpu::vulkan::Image textureImage{};
         std::optional<vk::raii::Sampler> textureSampler{};
 
-        std::vector<GUIElement> elements;
-
-
-        // std::vector<gpu::vulkan::Buffer> uniformBuffers;
-        // std::vector<uint8_t *> uniformBuffersMapped;
-        // std::vector<vk::raii::DescriptorSet> descriptorSets;
-        //
-        // std::vector<gpu::vulkan::Buffer> uniformBuffers2;
-        // std::vector<uint8_t *> uniformBuffersMapped2;
-        // std::vector<vk::raii::DescriptorSet> descriptorSets2;
 
         gpu::vulkan::Image defaultTextureImage{}; // New: Default white texture
 
@@ -127,9 +117,6 @@ namespace ufox::gui {
 
     };
 
-
-
-    // Bitwise operators for StateFlags
 
 
 }

@@ -4,77 +4,23 @@ namespace ufox::gui {
     GUI::GUI(gpu::vulkan::GraphicsDevice& gpu)
         : _gpu(gpu) {
 
-        GUIStyle s1{};
-        s1.cornerRadius = glm::vec4(10.0f, 10.0f, 10.0f, 10.0f);
-        s1.backgroundColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        s1.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f);
-        s1.borderTopColor = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-        s1.borderBottomColor = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
-        s1.borderLeftColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);
-        s1.borderRightColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
 
-        GUIStyle s2{};
-        s2.cornerRadius = glm::vec4(10.0f, 10.0f, 10.0f, 10.0f);
-        s2.backgroundColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        s2.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f);
-        s2.borderTopColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        s2.borderBottomColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        s2.borderLeftColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        s2.borderRightColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-
-        GUIElement g1{};
-        g1.transform.x = 10;
-        g1.transform.y = 10;
-        g1.transform.width = 100;
-        g1.transform.height = 100;
-        g1.name = "g1";
-        g1.style = s1;
-
-        GUIElement g2{};
-        g2.transform.x = 120;
-        g2.transform.y = 10;
-        g2.transform.width = 100;
-        g2.transform.height = 100;
-        g2.name = "g2";
-        g2.style = s2;
-
-
-        elements.emplace_back(std::move(g1));
-        elements.emplace_back(std::move(g2));
     }
-
-
-
-    void GUI::addStyle(const std::string& name, const GUIStyle& style) {
-        GUIStyleBuffer styleBuffer;
-        styleBuffer.name = name;
-        styleBuffer.content = style;
-
-        _gpu.createBuffer(GUI_STYLE_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer,
-                          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                          styleBuffer.buffer);
-
-        styleBuffer.mapped = static_cast<uint8_t*>(styleBuffer.buffer.memory->mapMemory(0, GUI_STYLE_BUFFER_SIZE));
-        std::memcpy(styleBuffer.mapped, &styleBuffer.content, GUI_STYLE_BUFFER_SIZE);
-
-        _styleContainer.push_back(std::move(styleBuffer));
-    }
-
 
     void GUI::update() const {
         for (const auto& element: elements) {
 
             core::TransformMatrix ubo{};
-            ubo.model = element.transform.getMatrix();
+            ubo.model = element->transform.getMatrix();
             ubo.view = glm::mat4(1.0f);
             ubo.proj = glm::ortho(
                 0.0f, static_cast<float>(_gpu.getSwapchainExtent().width),
                 0.0f, static_cast<float>(_gpu.getSwapchainExtent().height), // Swap bottom and top
                 -1.0f, 1.0f);
 
-            memcpy(element.transformBuffer[_gpu.getCurrentImage()].mapped, &ubo, core::TRANSFORM_BUFFER_SIZE);
+            memcpy(element->transformBuffer[_gpu.getCurrentImage()].mapped, &ubo, core::TRANSFORM_BUFFER_SIZE);
 
-            memcpy(element.styleBuffer[_gpu.getCurrentImage()].mapped, &element.style, GUI_STYLE_BUFFER_SIZE);
+            memcpy(element->styleBuffer[_gpu.getCurrentImage()].mapped, &element->style, GUI_STYLE_BUFFER_SIZE);
         }
     }
 
@@ -97,7 +43,7 @@ namespace ufox::gui {
 
 
         for (const auto& element: elements) {
-            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *_pipelineLayout, 0, *element.descriptorSets[_gpu.getCurrentFrame()], nullptr);
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *_pipelineLayout, 0, *element->descriptorSets[_gpu.getCurrentFrame()], nullptr);
             cmd.drawIndexed(std::size(Indices), 1, 0, 0, 0);
 
         }
@@ -352,7 +298,7 @@ namespace ufox::gui {
         if (!convSurface)
             throw std::runtime_error(std::string("Failed to convert texture: ") + SDL_GetError());
 
-        textureImage.format = vk::Format::eR8G8B8A8Srgb;
+        textureImage.format = vk::Format::eR8G8B8A8Unorm;
         textureImage.extent = vk::Extent2D{static_cast<uint32_t>(convSurface->w), static_cast<uint32_t>(convSurface->h)};
         vk::DeviceSize imageSize = textureImage.extent.width * textureImage.extent.height * 4;
 
@@ -410,8 +356,8 @@ namespace ufox::gui {
 
 
         for (auto& element: elements) {
-            element.transformBuffer.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
-            element.styleBuffer.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
+            element->transformBuffer.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
+            element->styleBuffer.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
 
             for (size_t i = 0; i < gpu::vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
                 gpu::vulkan::Buffer tranBuffer{};
@@ -424,7 +370,7 @@ namespace ufox::gui {
                 }
                 auto tranMapped = static_cast<uint8_t *>(tranBuffer.memory->mapMemory(0, core::TRANSFORM_BUFFER_SIZE));
                 tranBuffer.mapped = tranMapped;
-                element.transformBuffer.emplace_back(std::move(tranBuffer));
+                element->transformBuffer.emplace_back(std::move(tranBuffer));
 
                 gpu::vulkan::Buffer styleBuffer{};
 
@@ -436,7 +382,7 @@ namespace ufox::gui {
                 }
                 auto styleMapped = static_cast<uint8_t *>(styleBuffer.memory->mapMemory(0, GUI_STYLE_BUFFER_SIZE));
                 styleBuffer.mapped = styleMapped;
-                element.styleBuffer.emplace_back(std::move(styleBuffer));
+                element->styleBuffer.emplace_back(std::move(styleBuffer));
             }
         }
 
@@ -457,7 +403,7 @@ namespace ufox::gui {
                      .setMaxSets(gpu::vulkan::MAX_FRAMES_IN_FLIGHT)
                      .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
 
-            element.descriptorPool.emplace(_gpu.getDevice(), poolInfo);
+            element->descriptorPool.emplace(_gpu.getDevice(), poolInfo);
         }
     }
 
@@ -465,7 +411,7 @@ namespace ufox::gui {
         for (auto& element: elements) {
             std::vector<vk::DescriptorSetLayout> layouts(gpu::vulkan::MAX_FRAMES_IN_FLIGHT, *_descriptorSetLayout);
             vk::DescriptorSetAllocateInfo allocInfo{};
-            allocInfo.setDescriptorPool(*element.descriptorPool)
+            allocInfo.setDescriptorPool(*element->descriptorPool)
                      .setDescriptorSetCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT)
                      .setPSetLayouts(layouts.data());
 
@@ -473,7 +419,7 @@ namespace ufox::gui {
 
             for (size_t i = 0; i < gpu::vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
                 vk::DescriptorBufferInfo bufferInfo{};
-                bufferInfo.setBuffer(*element.transformBuffer[i].data)
+                bufferInfo.setBuffer(*element->transformBuffer[i].data)
                           .setOffset(0)
                           .setRange(core::TRANSFORM_BUFFER_SIZE);
                 vk::DescriptorImageInfo imageInfo{};
@@ -485,7 +431,7 @@ namespace ufox::gui {
                     imageInfo.setImageView(*textureImage.view);
                 }
                 vk::DescriptorBufferInfo defaultStyleBuffer{};
-                defaultStyleBuffer.setBuffer(*element.styleBuffer[i].data)
+                defaultStyleBuffer.setBuffer(*element->styleBuffer[i].data)
                                    .setOffset(0)
                                    .setRange(GUI_STYLE_BUFFER_SIZE);
 
@@ -509,7 +455,7 @@ namespace ufox::gui {
                         .setDescriptorCount(1)
                         .setPBufferInfo(&defaultStyleBuffer);
 
-                element.descriptorSets.emplace_back(std::move(sets[i]));
+                element->descriptorSets.emplace_back(std::move(sets[i]));
                 _gpu.getDevice().updateDescriptorSets(write, nullptr);
 
             }

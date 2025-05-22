@@ -5,6 +5,8 @@ add_library(UFox-Engine STATIC
         ufox_tools_shader_compiler.cpp
         ufox_inputSystem.cpp
         ufox_gui.cpp
+        ufox_panel.cpp
+
 )
 
 target_include_directories(UFox-Engine PUBLIC ${CMAKE_SOURCE_DIR})
