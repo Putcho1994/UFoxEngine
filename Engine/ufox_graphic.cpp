@@ -466,8 +466,8 @@ namespace ufox::gpu::vulkan {
            .setImage(*image.data)
            .setSubresourceRange({
                image.format == vk::Format::eR8G8B8A8Srgb ? vk::ImageAspectFlagBits::eColor :
-               (image.format == vk::Format::eD32Sfloat ? vk::ImageAspectFlagBits::eDepth :
-                vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil),
+               image.format == vk::Format::eD32Sfloat ? vk::ImageAspectFlagBits::eDepth :
+                   vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil,
                0, 1, 0, 1
            });
 

@@ -76,6 +76,8 @@ namespace ufox::gpu::vulkan {
     struct Buffer {
         std::optional<vk::raii::Buffer> data{};
         std::optional<vk::raii::DeviceMemory> memory{};
+        uint8_t* mapped;
+
     };
 
 
@@ -124,14 +126,14 @@ namespace ufox::gpu::vulkan {
 
         void changeBackgroundColor(const vk::raii::CommandBuffer& cmd,const glm::vec4& color) const;
 
-        const vk::raii::Device& getDevice() const{return *device;}
-        const vk::raii::PhysicalDevice& getPhysicalDevice() const{return *physicalDevice;}
-        const vk::Extent2D& getSwapchainExtent() const { return swapchainExtent; }
-        const vk::Format& getSwapchainFormat() const { return swapchainFormat; }
-        const vk::Format& getDepthFormat() const { return depthImage.format; }
+        [[nodiscard]] const vk::raii::Device& getDevice() const{return *device;}
+        [[nodiscard]] const vk::raii::PhysicalDevice& getPhysicalDevice() const{return *physicalDevice;}
+        [[nodiscard]] const vk::Extent2D& getSwapchainExtent() const { return swapchainExtent; }
+        [[nodiscard]] const vk::Format& getSwapchainFormat() const { return swapchainFormat; }
+        [[nodiscard]] const vk::Format& getDepthFormat() const { return depthImage.format; }
 
-        const uint32_t& getCurrentFrame() const { return currentFrame; }
-        const uint32_t& getCurrentImage() const { return currentImage; }
+        [[nodiscard]] const uint32_t& getCurrentFrame() const { return currentFrame; }
+        [[nodiscard]] const uint32_t& getCurrentImage() const { return currentImage; }
 
     private:
         //Instance properties

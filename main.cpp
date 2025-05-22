@@ -16,15 +16,6 @@ int main() {
 
         ufox::gui::GUI gui(gpu);
 
-        ufox::gui::GUIStyle params{};
-        params.cornerRadius = glm::vec4(40.0f, 40.0f, 40.0f, 40.0f);
-        params.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f);
-        params.borderTopColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
-        params.borderRightColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);
-        params.borderBottomColor = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
-        params.borderLeftColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-
-        gui.addStyle("default", params, ufox::gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
 
         gui.init();
 
@@ -57,7 +48,7 @@ int main() {
                         auto [w, h] = window.getSize();
                         fmt::println("Window resized: {}x{}", w, h);
                         gpu.recreateSwapchain(window);
-                        gui.update();
+
                         break;
                     }
                     case SDL_EVENT_WINDOW_MINIMIZED: {
@@ -71,8 +62,8 @@ int main() {
                     case SDL_EVENT_MOUSE_MOTION: {
                         input.EnabledMousePositionOutside(false);
                         input.updateMousePositionInsideWindow();
-                        gui.update();
-                        fmt::println("mm");
+
+
                         break;
                     }
                     case SDL_EVENT_WINDOW_FOCUS_LOST: {
@@ -97,11 +88,13 @@ int main() {
             if (gpu.enableRender) {
                 const vk::raii::CommandBuffer& cmd = *gpu.beginFrame(window);
                 if (cmd != nullptr) {
+
                     gpu.beginDynamicRendering(cmd);
 
                     gui.draw(cmd);
 
                     gpu.endDynamicRendering(cmd);
+                    gui.update();
                     gpu.endFrame(cmd, window);
                 }
             }

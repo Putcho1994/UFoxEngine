@@ -4,63 +4,77 @@ namespace ufox::gui {
     GUI::GUI(gpu::vulkan::GraphicsDevice& gpu)
         : _gpu(gpu) {
 
+        GUIStyle s1{};
+        s1.cornerRadius = glm::vec4(10.0f, 10.0f, 10.0f, 10.0f);
+        s1.backgroundColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        s1.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f);
+        s1.borderTopColor = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+        s1.borderBottomColor = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+        s1.borderLeftColor = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);
+        s1.borderRightColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f);
+
+        GUIStyle s2{};
+        s2.cornerRadius = glm::vec4(10.0f, 10.0f, 10.0f, 10.0f);
+        s2.backgroundColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        s2.borderThickness = glm::vec4(2.0f, 2.0f, 2.0f, 2.0f);
+        s2.borderTopColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        s2.borderBottomColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        s2.borderLeftColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        s2.borderRightColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+        GUIElement g1{};
+        g1.transform.x = 10;
+        g1.transform.y = 10;
+        g1.transform.width = 100;
+        g1.transform.height = 100;
+        g1.name = "g1";
+        g1.style = s1;
+
+        GUIElement g2{};
+        g2.transform.x = 120;
+        g2.transform.y = 10;
+        g2.transform.width = 100;
+        g2.transform.height = 100;
+        g2.name = "g2";
+        g2.style = s2;
+
+
+        elements.emplace_back(std::move(g1));
+        elements.emplace_back(std::move(g2));
     }
 
-    void GUI::addStyle(const std::string& name, const GUIStyle& style, uint32_t inFlight) {
+
+
+    void GUI::addStyle(const std::string& name, const GUIStyle& style) {
         GUIStyleBuffer styleBuffer;
         styleBuffer.name = name;
         styleBuffer.content = style;
-        styleBuffer.buffer.reserve(inFlight);
-        styleBuffer.mapped.reserve(inFlight);
-        for (uint32_t i = 0; i < inFlight; ++i) {
-            gpu::vulkan::Buffer buffer{};
 
-            _gpu.createBuffer(GUI_STYLE_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer,
-                              vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                              buffer);
-            if (!buffer.memory) {
-                throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
-            }
-            auto* mapped = static_cast<uint8_t*>(buffer.memory->mapMemory(0, GUI_STYLE_BUFFER_SIZE));
-            std::memcpy(mapped, &styleBuffer.content, GUI_STYLE_BUFFER_SIZE);
-            styleBuffer.buffer.emplace_back(std::move(buffer));
-            styleBuffer.mapped.emplace_back(mapped);
-        }
+        _gpu.createBuffer(GUI_STYLE_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer,
+                          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                          styleBuffer.buffer);
+
+        styleBuffer.mapped = static_cast<uint8_t*>(styleBuffer.buffer.memory->mapMemory(0, GUI_STYLE_BUFFER_SIZE));
+        std::memcpy(styleBuffer.mapped, &styleBuffer.content, GUI_STYLE_BUFFER_SIZE);
+
         _styleContainer.push_back(std::move(styleBuffer));
     }
 
-    gpu::vulkan::Buffer* GUI::getStyleBuffer(uint32_t index, uint32_t frameIndex) {
-
-        auto& b = _styleContainer[index];
-
-        return &b.buffer[frameIndex];
-    }
 
     void GUI::update() const {
-        core::TransformMatrix ubo{};
-        ubo.model = glm::translate(glm::mat4(1.0f), glm::vec3(0+10, 0+10, 0.0f)) *
-                            glm::scale(glm::mat4(1.0f), glm::vec3(500, 500, 1));
-        ubo.view = glm::mat4(1.0f);
-        ubo.proj = glm::ortho(
-        0.0f, static_cast<float>(_gpu.getSwapchainExtent().width),
-        0.0f, static_cast<float>(_gpu.getSwapchainExtent().height), // Swap bottom and top
-        -1.0f, 1.0f);
+        for (const auto& element: elements) {
 
-        for (auto ubm: uniformBuffersMapped) {
-            memcpy(ubm, &ubo, core::TRANSFORM_BUFFER_SIZE);
-        }
+            core::TransformMatrix ubo{};
+            ubo.model = element.transform.getMatrix();
+            ubo.view = glm::mat4(1.0f);
+            ubo.proj = glm::ortho(
+                0.0f, static_cast<float>(_gpu.getSwapchainExtent().width),
+                0.0f, static_cast<float>(_gpu.getSwapchainExtent().height), // Swap bottom and top
+                -1.0f, 1.0f);
 
-        core::TransformMatrix ubo2{};
-        ubo2.model = glm::translate(glm::mat4(1.0f), glm::vec3(0+400, 0+10, 0.0f)) *
-                            glm::scale(glm::mat4(1.0f), glm::vec3(500, 500, 1));
-        ubo2.view = glm::mat4(1.0f);
-        ubo2.proj = glm::ortho(
-        0.0f, static_cast<float>(_gpu.getSwapchainExtent().width),
-        0.0f, static_cast<float>(_gpu.getSwapchainExtent().height), // Swap bottom and top
-        -1.0f, 1.0f);
+            memcpy(element.transformBuffer[_gpu.getCurrentImage()].mapped, &ubo, core::TRANSFORM_BUFFER_SIZE);
 
-        for (auto ubm: uniformBuffersMapped2) {
-            memcpy(ubm, &ubo2, core::TRANSFORM_BUFFER_SIZE);
+            memcpy(element.styleBuffer[_gpu.getCurrentImage()].mapped, &element.style, GUI_STYLE_BUFFER_SIZE);
         }
     }
 
@@ -81,13 +95,12 @@ namespace ufox::gui {
         cmd.bindVertexBuffers(0, vertexBuffers, offsets);
         cmd.bindIndexBuffer(*_indexBuffer.data, 0, vk::IndexType::eUint16);
 
-        // Draw Object 1
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *_pipelineLayout, 0, *descriptorSets[_gpu.getCurrentFrame()], nullptr);
-        cmd.drawIndexed(std::size(Indices), 1, 0, 0, 0);
 
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *_pipelineLayout, 0, *descriptorSets2[_gpu.getCurrentFrame()], nullptr);
-        cmd.drawIndexed(std::size(Indices), 1, 0, 0, 0);
+        for (const auto& element: elements) {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *_pipelineLayout, 0, *element.descriptorSets[_gpu.getCurrentFrame()], nullptr);
+            cmd.drawIndexed(std::size(Indices), 1, 0, 0, 0);
 
+        }
     }
 
     void GUI::init() {
@@ -96,6 +109,8 @@ namespace ufox::gui {
         createPipeline();
         createVertexBuffer();
         createIndexBuffer();
+        createDefaultTextureImage();
+        createDefaultTextureImageView();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
@@ -227,9 +242,9 @@ namespace ufox::gui {
                      .setDepthAttachmentFormat(_gpu.getDepthFormat());
 
         vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-        depthStencil.setDepthTestEnable(true)
-               .setDepthWriteEnable(true)
-               .setDepthCompareOp(vk::CompareOp::eLess)
+        depthStencil.setDepthTestEnable(false)
+               .setDepthWriteEnable(false)
+               .setDepthCompareOp(vk::CompareOp::eNever)
                .setDepthBoundsTestEnable(false)
                .setStencilTestEnable(false);
 
@@ -255,18 +270,18 @@ namespace ufox::gui {
 
     void GUI::createVertexBuffer() {
         gpu::vulkan::Buffer stagingBuffer{};
-        _gpu.createBuffer(GUI_GEOMETRY_BUFFER_SIZE, vk::BufferUsageFlagBits::eTransferSrc,
+        _gpu.createBuffer(GUI_RECT_MESH_BUFFER_SIZE, vk::BufferUsageFlagBits::eTransferSrc,
                           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
                           stagingBuffer);
 
         // copy the vertex and color data into that device memory
-        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, GUI_GEOMETRY_BUFFER_SIZE ) );
-        memcpy( pData, Geometry, GUI_GEOMETRY_BUFFER_SIZE );
+        auto pData = static_cast<uint8_t *>( stagingBuffer.memory->mapMemory( 0, GUI_RECT_MESH_BUFFER_SIZE ) );
+        memcpy( pData, RectMesh, GUI_RECT_MESH_BUFFER_SIZE );
         stagingBuffer.memory->unmapMemory();
 
-        _gpu.createBuffer(GUI_GEOMETRY_BUFFER_SIZE, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eVertexBuffer,
+        _gpu.createBuffer(GUI_RECT_MESH_BUFFER_SIZE, vk::BufferUsageFlagBits::eTransferDst|vk::BufferUsageFlagBits::eVertexBuffer,
                           vk::MemoryPropertyFlagBits::eDeviceLocal, _vertexBuffer);
-        _gpu.copyBuffer(stagingBuffer, _vertexBuffer, GUI_GEOMETRY_BUFFER_SIZE);
+        _gpu.copyBuffer(stagingBuffer, _vertexBuffer, GUI_RECT_MESH_BUFFER_SIZE);
     }
 
     void GUI::createIndexBuffer() {
@@ -283,6 +298,45 @@ namespace ufox::gui {
                           vk::MemoryPropertyFlagBits::eDeviceLocal, _indexBuffer);
         _gpu.copyBuffer(stagingBuffer, _indexBuffer, GUI_INDEX_BUFFER_SIZE);
     }
+
+    void GUI::createDefaultTextureImage() {
+        defaultTextureImage.format = vk::Format::eR8G8B8A8Srgb;
+        defaultTextureImage.extent = vk::Extent2D{1, 1};
+        constexpr vk::DeviceSize imageSize = 4; // 1x1 pixel, 4 bytes (RGBA)
+
+        // Create staging buffer
+        gpu::vulkan::Buffer stagingBuffer{};
+        _gpu.createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+                          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                          stagingBuffer);
+
+        // Set 1x1 pixel to white (RGBA = 1, 1, 1, 1)
+        uint8_t whitePixel[4] = {255, 255, 255, 255}; // Full white, opaque
+        auto pData = static_cast<uint8_t*>(stagingBuffer.memory->mapMemory(0, imageSize));
+        memcpy(pData, whitePixel, imageSize);
+        stagingBuffer.memory->unmapMemory();
+
+        // Create image
+        _gpu.createImage(vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                         vk::MemoryPropertyFlagBits::eDeviceLocal, defaultTextureImage);
+
+        // Transition and copy
+        _gpu.transitionImageLayout(defaultTextureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+        _gpu.copyBufferToImage(stagingBuffer, defaultTextureImage);
+        _gpu.transitionImageLayout(defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+    }
+
+    void GUI::createDefaultTextureImageView() {
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.setImage(*defaultTextureImage.data)
+                .setViewType(vk::ImageViewType::e2D)
+                .setFormat(defaultTextureImage.format)
+                .setSubresourceRange({vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+
+        defaultTextureImage.view.emplace(_gpu.getDevice(), viewInfo);
+    }
+
+
 
     void GUI::createTextureImage() {
         const std::string filename = "Contents/statue-1275469_1280.jpg";
@@ -353,148 +407,112 @@ namespace ufox::gui {
     }
 
     void GUI::createUniformBuffers() {
-        uniformBuffers.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT); // Create elements
-        uniformBuffersMapped.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
 
-        for (size_t i = 0; i < gpu::vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
-            gpu::vulkan::Buffer buffer{};
 
-            _gpu.createBuffer(core::TRANSFORM_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                buffer);
+        for (auto& element: elements) {
+            element.transformBuffer.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
+            element.styleBuffer.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
 
-            if (!buffer.memory) {
-                throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
+            for (size_t i = 0; i < gpu::vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
+                gpu::vulkan::Buffer tranBuffer{};
+
+                _gpu.createBuffer(core::TRANSFORM_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer,
+                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                    tranBuffer);
+                if (!tranBuffer.memory) {
+                    throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
+                }
+                auto tranMapped = static_cast<uint8_t *>(tranBuffer.memory->mapMemory(0, core::TRANSFORM_BUFFER_SIZE));
+                tranBuffer.mapped = tranMapped;
+                element.transformBuffer.emplace_back(std::move(tranBuffer));
+
+                gpu::vulkan::Buffer styleBuffer{};
+
+                _gpu.createBuffer(GUI_STYLE_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer,
+                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                    styleBuffer);
+                if (!styleBuffer.memory) {
+                    throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
+                }
+                auto styleMapped = static_cast<uint8_t *>(styleBuffer.memory->mapMemory(0, GUI_STYLE_BUFFER_SIZE));
+                styleBuffer.mapped = styleMapped;
+                element.styleBuffer.emplace_back(std::move(styleBuffer));
             }
-            auto mapped = static_cast<uint8_t *>(buffer.memory->mapMemory(0, core::TRANSFORM_BUFFER_SIZE));
-            uniformBuffers.emplace_back(std::move(buffer));
-            uniformBuffersMapped.emplace_back(mapped);
-        }
-
-        uniformBuffers2.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT); // Create elements
-        uniformBuffersMapped2.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
-
-        for (size_t i = 0; i < gpu::vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
-            gpu::vulkan::Buffer buffer{};
-
-            _gpu.createBuffer(core::TRANSFORM_BUFFER_SIZE, vk::BufferUsageFlagBits::eUniformBuffer,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                buffer);
-
-            if (!buffer.memory) {
-                throw std::runtime_error("Buffer memory is not initialized for buffer " + std::to_string(i));
-            }
-            auto mapped = static_cast<uint8_t *>(buffer.memory->mapMemory(0, core::TRANSFORM_BUFFER_SIZE));
-            uniformBuffers2.emplace_back(std::move(buffer));
-            uniformBuffersMapped2.emplace_back(mapped);
         }
 
     }
 
     void GUI::createDescriptorPool() {
-        std::array<vk::DescriptorPoolSize, 3> poolSize{};
-        poolSize[0].setType(vk::DescriptorType::eUniformBuffer)
-                   .setDescriptorCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT*2);
-        poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler)
-                   .setDescriptorCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT*2);
-        poolSize[2].setType(vk::DescriptorType::eUniformBuffer)
-                   .setDescriptorCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT*2);
+        for (auto& element: elements) {
+            std::array<vk::DescriptorPoolSize, 3> poolSize{};
+            poolSize[0].setType(vk::DescriptorType::eUniformBuffer)
+                       .setDescriptorCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
+            poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler)
+                       .setDescriptorCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
+            poolSize[2].setType(vk::DescriptorType::eUniformBuffer)
+                       .setDescriptorCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
 
-        vk::DescriptorPoolCreateInfo poolInfo{};
-        poolInfo.setPoolSizeCount(poolSize.size())
-                .setPPoolSizes(poolSize.data())
-                .setMaxSets(gpu::vulkan::MAX_FRAMES_IN_FLIGHT*2)
-                .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.setPoolSizes(poolSize)
+                     .setMaxSets(gpu::vulkan::MAX_FRAMES_IN_FLIGHT)
+                     .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
 
-        _descriptorPool.emplace(_gpu.getDevice(), poolInfo);
+            element.descriptorPool.emplace(_gpu.getDevice(), poolInfo);
+        }
     }
 
     void GUI::createDescriptorSets() {
-        std::vector<vk::DescriptorSetLayout> layouts(gpu::vulkan::MAX_FRAMES_IN_FLIGHT*2, *_descriptorSetLayout);
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.setDescriptorPool(*_descriptorPool)
-                 .setDescriptorSetCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT *2)
-                 .setPSetLayouts(layouts.data());
+        for (auto& element: elements) {
+            std::vector<vk::DescriptorSetLayout> layouts(gpu::vulkan::MAX_FRAMES_IN_FLIGHT, *_descriptorSetLayout);
+            vk::DescriptorSetAllocateInfo allocInfo{};
+            allocInfo.setDescriptorPool(*element.descriptorPool)
+                     .setDescriptorSetCount(gpu::vulkan::MAX_FRAMES_IN_FLIGHT)
+                     .setPSetLayouts(layouts.data());
 
-        descriptorSets.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
-        descriptorSets2.reserve(gpu::vulkan::MAX_FRAMES_IN_FLIGHT);
-        auto sets = _gpu.getDevice().allocateDescriptorSets(allocInfo);
+            auto sets = _gpu.getDevice().allocateDescriptorSets(allocInfo);
 
+            for (size_t i = 0; i < gpu::vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
+                vk::DescriptorBufferInfo bufferInfo{};
+                bufferInfo.setBuffer(*element.transformBuffer[i].data)
+                          .setOffset(0)
+                          .setRange(core::TRANSFORM_BUFFER_SIZE);
+                vk::DescriptorImageInfo imageInfo{};
+                imageInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+                         .setSampler(*textureSampler);
+                if (true) {
+                    imageInfo.setImageView(*defaultTextureImage.view);
+                } else {
+                    imageInfo.setImageView(*textureImage.view);
+                }
+                vk::DescriptorBufferInfo defaultStyleBuffer{};
+                defaultStyleBuffer.setBuffer(*element.styleBuffer[i].data)
+                                   .setOffset(0)
+                                   .setRange(GUI_STYLE_BUFFER_SIZE);
 
-        for (size_t i = 0; i < gpu::vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
-            vk::DescriptorBufferInfo bufferInfo{};
-            bufferInfo.setBuffer(*uniformBuffers[i].data)
-                      .setOffset(0)
-                      .setRange(core::TRANSFORM_BUFFER_SIZE);
+                std::array<vk::WriteDescriptorSet, 3> write{};
+                write[0].setDstSet(*sets[i])
+                        .setDstBinding(0)
+                        .setDstArrayElement(0)
+                        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                        .setDescriptorCount(1)
+                        .setPBufferInfo(&bufferInfo);
+                write[1].setDstSet(*sets[i])
+                        .setDstBinding(1)
+                        .setDstArrayElement(0)
+                        .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                        .setDescriptorCount(1)
+                        .setPImageInfo(&imageInfo);
+                write[2].setDstSet(*sets[i])
+                        .setDstBinding(2)
+                        .setDstArrayElement(0)
+                        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                        .setDescriptorCount(1)
+                        .setPBufferInfo(&defaultStyleBuffer);
 
-            vk::DescriptorImageInfo imageInfo{};
-            imageInfo.setImageView(*textureImage.view)
-                     .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
-                     .setSampler(*textureSampler);
+                element.descriptorSets.emplace_back(std::move(sets[i]));
+                _gpu.getDevice().updateDescriptorSets(write, nullptr);
 
-
-            vk::DescriptorBufferInfo roundCornerInfo{};
-            const GUIStyleBuffer& style = _styleContainer[0];
-            roundCornerInfo.setBuffer(*style.buffer[i].data)
-                           .setOffset(0)
-                           .setRange(GUI_STYLE_BUFFER_SIZE);
-
-
-            std::array<vk::WriteDescriptorSet,3> write{};
-            write[0].setDstSet(*sets[i])
-                    .setDstBinding(0)
-                    .setDstArrayElement(0)
-                    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                    .setDescriptorCount(1)
-                    .setPBufferInfo(&bufferInfo);
-            write[1].setDstSet(*sets[i])
-                    .setDstBinding(1)
-                    .setDstArrayElement(0)
-                    .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                    .setDescriptorCount(1)
-                    .setPImageInfo(&imageInfo);
-            write[2].setDstSet(*sets[i])
-                    .setDstBinding(2)
-                    .setDstArrayElement(0)
-                    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                    .setDescriptorCount(1)
-                    .setPBufferInfo(&roundCornerInfo);
-
-            // Object 2
-            vk::DescriptorBufferInfo bufferInfo2{};
-            bufferInfo2.setBuffer(*uniformBuffers2[i].data)
-                       .setOffset(0)
-                       .setRange(core::TRANSFORM_BUFFER_SIZE);
-
-
-
-            std::array<vk::WriteDescriptorSet, 3> write2{};
-            write2[0].setDstSet(*sets[i + gpu::vulkan::MAX_FRAMES_IN_FLIGHT])
-                     .setDstBinding(0)
-                     .setDstArrayElement(0)
-                     .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                     .setDescriptorCount(1)
-                     .setPBufferInfo(&bufferInfo2);
-            write2[1].setDstSet(*sets[i + gpu::vulkan::MAX_FRAMES_IN_FLIGHT])
-                     .setDstBinding(1)
-                     .setDstArrayElement(0)
-                     .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                     .setDescriptorCount(1)
-                     .setPImageInfo(&imageInfo);
-            write2[2].setDstSet(*sets[i + gpu::vulkan::MAX_FRAMES_IN_FLIGHT])
-                     .setDstBinding(2)
-                     .setDstArrayElement(0)
-                     .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                     .setDescriptorCount(1)
-                     .setPBufferInfo(&roundCornerInfo);
-
-            descriptorSets.emplace_back(std::move(sets[i]));
-            descriptorSets2.emplace_back(std::move(sets[i + gpu::vulkan::MAX_FRAMES_IN_FLIGHT]));
-
-            std::vector<vk::WriteDescriptorSet> writes;
-            writes.insert(writes.end(), write.begin(), write.end());
-            writes.insert(writes.end(), write2.begin(), write2.end());
-            _gpu.getDevice().updateDescriptorSets(writes, nullptr);
+            }
         }
     }
 } // namespace ufox::ui

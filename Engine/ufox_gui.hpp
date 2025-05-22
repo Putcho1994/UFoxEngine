@@ -5,6 +5,7 @@
 #ifndef UFOX_GUI_HPP
 #define UFOX_GUI_HPP
 #pragma once
+#include <functional>
 #include <string>
 #include <vector>
 #include <Engine/ufox_graphic.hpp>
@@ -20,25 +21,9 @@ namespace ufox::gui {
         glm::vec2 texCoord;
     };
 
-    constexpr GUIVertex Geometry[] {
-            {{0.0f, 0.0f,}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}, // Top-left
-             {{1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}}, // Top-right
-             {{1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}, // Bottom-right
-             {{0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}, // Bottom-left
-    };
-
-    constexpr uint16_t Indices[] {
-            0, 1, 2, 2, 3, 0,
-    };
-
-    struct GUIElement { // Renamed from Rectangle to GUIElement
-        core::TransformRect transform;
-        float zIndex;
-        uint32_t styleIndex;
-    };
-
     struct GUIStyle {
         glm::vec4 cornerRadius; // Radius for each corner (top-left, top-right, bottom-right, bottom-left)
+        glm::vec4 backgroundColor;
         glm::vec4 borderThickness; // Thickness for each side (top, right, bottom, left)
         glm::vec4 borderTopColor; // RGBA color for top border
         glm::vec4 borderRightColor; // RGBA color for right border
@@ -49,19 +34,38 @@ namespace ufox::gui {
     struct GUIStyleBuffer {
         std::string name; // Identifier for the style buffer
         GUIStyle content; // Styling properties (corner radius, border thickness, colors)
-        std::vector<gpu::vulkan::Buffer> buffer; // Vector of Vulkan buffers for style data
-        std::vector<uint8_t*> mapped; // Vector of mapped memory pointers for the buffers
+        gpu::vulkan::Buffer buffer{}; // Vector of Vulkan buffers for style data
+        uint8_t* mapped; // Vector of mapped memory pointers for the buffers
     };
 
-    struct PushConstants {
-        uint32_t rectIndex;
-        float zIndex;
+    struct  GUIElement {
+        std::string name = "GUI-Element";
+        std::string label = "label";
+        core::TransformRect transform{};
+        GUIStyle style{};
+
+        std::vector<gpu::vulkan::Buffer> transformBuffer{};
+        std::vector<gpu::vulkan::Buffer> styleBuffer{};
+        std::optional<vk::raii::DescriptorPool> descriptorPool{};
+        std::vector<vk::raii::DescriptorSet> descriptorSets{};
     };
 
-    constexpr size_t MAX_ELEMENTS = 100;
+
+
+    constexpr GUIVertex RectMesh[] {
+        {{0.0f, 0.0f,}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}}, // Top-left
+         {{1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}}, // Top-right
+         {{1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}, // Bottom-right
+         {{0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}, // Bottom-left
+};
+
+    constexpr uint16_t Indices[] {
+        0, 1, 2, 2, 3, 0,
+};
+
 
     constexpr vk::DeviceSize GUI_VERTEX_BUFFER_SIZE = sizeof(GUIVertex);
-    constexpr vk::DeviceSize GUI_GEOMETRY_BUFFER_SIZE = sizeof(Geometry);
+    constexpr vk::DeviceSize GUI_RECT_MESH_BUFFER_SIZE = sizeof(RectMesh);
     constexpr vk::DeviceSize GUI_INDEX_BUFFER_SIZE = sizeof(Indices);
     constexpr vk::DeviceSize GUI_STYLE_BUFFER_SIZE = sizeof(GUIStyle);
 
@@ -70,9 +74,8 @@ namespace ufox::gui {
         explicit GUI(gpu::vulkan::GraphicsDevice& gpu);
         ~GUI() = default;
 
-        void addElement(float x, float y, float width, float height, float zIndex, uint32_t styleIndex);
-        void addStyle(const std::string& name, const GUIStyle& style, uint32_t inFlight);
-         gpu::vulkan::Buffer* getStyleBuffer(uint32_t index, uint32_t frameIndex);
+
+        void addStyle(const std::string& name, const GUIStyle& style);
 
         void init();
         void update() const;
@@ -90,21 +93,28 @@ namespace ufox::gui {
 
         gpu::vulkan::Image textureImage{};
         std::optional<vk::raii::Sampler> textureSampler{};
-        std::vector<gpu::vulkan::Buffer> uniformBuffers;
-        std::vector<uint8_t *> uniformBuffersMapped;
-        std::vector<vk::raii::DescriptorSet> descriptorSets;
 
-        std::vector<gpu::vulkan::Buffer> uniformBuffers2;
-        std::vector<uint8_t *> uniformBuffersMapped2;
-        std::vector<vk::raii::DescriptorSet> descriptorSets2;
+        std::vector<GUIElement> elements;
 
-        std::vector<GUIElement> guiElements;
+
+        // std::vector<gpu::vulkan::Buffer> uniformBuffers;
+        // std::vector<uint8_t *> uniformBuffersMapped;
+        // std::vector<vk::raii::DescriptorSet> descriptorSets;
+        //
+        // std::vector<gpu::vulkan::Buffer> uniformBuffers2;
+        // std::vector<uint8_t *> uniformBuffersMapped2;
+        // std::vector<vk::raii::DescriptorSet> descriptorSets2;
+
+        gpu::vulkan::Image defaultTextureImage{}; // New: Default white texture
+
 
         void createDescriptorSetLayout();
         void createPipelineLayout();
         void createPipeline();
         void createVertexBuffer();
         void createIndexBuffer();
+        void createDefaultTextureImage(); // New
+        void createDefaultTextureImageView(); // New
 
         void createTextureImage();
         void createTextureImageView();
@@ -114,8 +124,13 @@ namespace ufox::gui {
         void createDescriptorPool();
         void createDescriptorSets();
 
-        static vk::DeviceSize calculateTransformBufferSize();
+
     };
+
+
+
+    // Bitwise operators for StateFlags
+
 
 }
 

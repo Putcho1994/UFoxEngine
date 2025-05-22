@@ -5,8 +5,9 @@ layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec2 fragScale; // Rectangle size from vertex shader
 
 layout(binding = 1) uniform sampler2D texSampler;
-layout(binding = 2) uniform RoundedRectParams {
+layout(binding = 2) uniform GUIStyle {
     vec4 cornerRadius;       // x: top-left, y: top-right, z: bottom-left, w: bottom-right
+    vec4 backgroundColor;
     vec4 borderThickness;   // x: top, y: right, z: bottom, w: left
     vec4 borderTopColor;    // Color for top border
     vec4 borderRightColor;  // Color for right border
@@ -84,7 +85,7 @@ void main() {
 
     // Combine Fragcolor with textColor
     vec4 texColor = texture(texSampler, fragTexCoord);
-    vec4 mainColorOpacity = vec4(lerp(black.rgb, white.rgb, fragColor.a), 1.0);
+    vec4 mainColorOpacity = vec4(lerp(black.rgb, white.rgb, params.backgroundColor.a), 1.0);
     float mainMask = mix(mainColorOpacity, black, backgroundMask).r;
     float borderMask = mix(black, white, marginMask).r;
     float invertMainMask = mix(white, black, backgroundMask).r;
@@ -92,7 +93,7 @@ void main() {
 
     // Coloring
     vec4 finalBorderColor = borderMask * borderColor;
-    vec4 finalMainColor = mainMask * texColor;
+    vec4 finalMainColor = mainMask * texColor * params.backgroundColor;
     vec4 finalColor = mix(finalMainColor, finalBorderColor, finalBorderMask);
 
     outColor = finalColor;
