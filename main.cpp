@@ -1,9 +1,9 @@
 #include <fmt/core.h>
 #include <Windowing/ufox_windowing.hpp>
 #include <Engine/ufox_graphic.hpp>
-#include <Engine/ufox_inputSystem.hpp>
-#include <Engine/ufox_gui.hpp>
-#include <Engine/ufox_panel.hpp>
+#include <Engine/ufox_input_system.hpp>
+#include <Engine/ufox_gui_renderer.hpp>
+#include <Engine/ufox_view_panel.hpp>
 
 
 int main() {
@@ -17,13 +17,13 @@ int main() {
 
         ufox::gui::GUI gui(gpu);
 
-        ufox::Panel mainPanel{input};
+        ufox::ViewPanel mainPanel{input};
         mainPanel.rootElement.style.backgroundColor = {0.11f, 0.11f, 0.11f, 1.0f};
         mainPanel.transform.x = 0;
         mainPanel.transform.y = 0;
 
 
-        ufox::Panel sidePanel{input};
+        ufox::ViewPanel sidePanel{input};
         sidePanel.rootElement.style.backgroundColor = {0.5f, 0.5f, 0.5f, 1.0f};
         sidePanel.transform.x = 400; // Right of mainPanel
         sidePanel.transform.y = 0;
@@ -75,8 +75,7 @@ int main() {
                     case SDL_EVENT_MOUSE_MOTION: {
                         input.enabledMousePositionOutside(false);
                         input.updateMousePositionInsideWindow();
-                        mainPanel.onUpdate(event);
-                        sidePanel.onUpdate(event);
+
 
                         break;
                     }
@@ -88,6 +87,7 @@ int main() {
                         input.enabledMousePositionOutside(true);
                         break;
                     }
+
                     default: {
                         if (event.motion.x == 0 || event.motion.y == 0) {
                             input.enabledMousePositionOutside(true);
@@ -95,6 +95,9 @@ int main() {
 
                     }
                 }
+
+                mainPanel.onUpdate(event);
+                sidePanel.onUpdate(event);
             }
 
             input.updateMousePositionOutsideWindow(window.get());

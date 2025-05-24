@@ -7,8 +7,8 @@
 #pragma once
 #include <vector>
 #include <Engine/ufox_engine_core.hpp>
-#include <Engine/ufox_gui.hpp>
-#include <Engine/ufox_inputSystem.hpp>
+#include <Engine/ufox_gui_renderer.hpp>
+#include <Engine/ufox_input_system.hpp>
 #include <SDL3/SDL_mouse.h>
 
 
@@ -20,33 +20,36 @@ namespace ufox {
         eLeft
     };
 
-    class Panel {
+    class ViewPanel {
     public:
-        Panel(InputSystem& input);
-        ~Panel();
+        ViewPanel(InputSystem& input);
+        ~ViewPanel();
 
-        void setTransform(const core::TransformRect& newTransform) {
+        void setTransform(core::TransformRect newTransform) {
             transform = newTransform;
             rootElement.transform = transform; // Update root element's transform
         }
 
         void onResize(const glm::vec2& newSize);
-        void onUpdate(const SDL_Event& event) const;
+        void onUpdate(const SDL_Event& event);
         void onRender();
-        void BridgePanel(Panel& target, AttachmentPosition position);
+        void BridgePanel(ViewPanel& target, AttachmentPosition position);
 
         core::TransformRect transform{};
         gui::GUIElement rootElement{};
         bool dockable{false};
-        Panel* top{nullptr};
-        Panel* bottom{nullptr};
-        Panel* right{nullptr};
-        Panel* left{nullptr};
+        ViewPanel* top{nullptr};
+        ViewPanel* bottom{nullptr};
+        ViewPanel* right{nullptr};
+        ViewPanel* left{nullptr};
 
     private:
         InputSystem& _input;
         static constexpr float splitterHandleOffset = 5.0f; // Pixels left of right neighbor's x
         static constexpr float splitterHandleSize = 10.0f; // Width of splitter handle
+
+        glm::vec2 currentWindowSize{0};
+        bool enabledSplitterResizing{false};
     };
 
 

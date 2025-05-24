@@ -2,7 +2,7 @@
 // Created by b-boy on 03.05.2025.
 //
 
-#include "ufox_inputSystem.hpp"
+#include "ufox_input_system.hpp"
 
 #include <_mingw_mac.h>
 

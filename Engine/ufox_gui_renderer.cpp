@@ -1,4 +1,4 @@
-#include <Engine/ufox_gui.hpp>
+#include <Engine/ufox_gui_renderer.hpp>
 namespace ufox::gui {
 
     GUI::GUI(gpu::vulkan::GraphicsDevice& gpu)

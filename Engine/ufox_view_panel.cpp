@@ -2,15 +2,15 @@
 // Created by b-boy on 22.05.2025.
 //
 
-#include <Engine/ufox_panel.hpp>
+#include <Engine/ufox_view_panel.hpp>
 
 
 
 namespace ufox {
-    Panel::Panel(InputSystem& input) : _input(input){}
-    Panel::~Panel() = default;
+    ViewPanel::ViewPanel(InputSystem& input) : _input(input){}
+    ViewPanel::~ViewPanel() = default;
 
-    void Panel::onResize(const glm::vec2& newSize) {
+    void ViewPanel::onResize(const glm::vec2& newSize) {
         // Width: Check if panel is outside window width
         if (newSize.x < transform.x) {
             transform.width = 0;
@@ -42,24 +42,43 @@ namespace ufox {
         }
 
         rootElement.transform = transform;
+        currentWindowSize = newSize;
     }
 
-    void Panel::onUpdate(const SDL_Event& event) const {
-        if (right) {
-            auto mousePos = _input.getMousePosition();
-            float splitterStart = right->transform.x - splitterHandleOffset;
-            float splitterEnd = splitterStart + splitterHandleSize;
+    void ViewPanel::onUpdate(const SDL_Event& event){
+        auto mousePos = _input.getMousePosition();
 
-            // Check if mouse x is within splitter handle (y not constrained for simplicity)
-            if (mousePos.x >= splitterStart && mousePos.x <= splitterEnd) {
-                _input.setCursor(CursorType::eEWResize);
-            } else { _input.setCursor(CursorType::eDefault); }
+        if(enabledSplitterResizing) {
+            float xPos = mousePos.x ;
+            transform.x = glm::clamp(xPos, 0.0f, currentWindowSize.x);;
+            if (left) {
+                left->onResize(currentWindowSize);
+                onResize(currentWindowSize);
+            }
+
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP ) {
+                enabledSplitterResizing = false;
+            }
+        }
+        else {
+            if (left) {
+                float splitterStart = transform.x - splitterHandleOffset;
+                float splitterEnd = splitterStart + splitterHandleSize;
+
+                // Check if mouse x is within splitter handle (y not constrained for simplicity)
+                if (mousePos.x >= splitterStart && mousePos.x <= splitterEnd) {
+                    _input.setCursor(CursorType::eEWResize);
+                    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ) {
+                        enabledSplitterResizing = true;
+                    }
+                } else { _input.setCursor(CursorType::eDefault); }
+            }
         }
     }
 
-    void Panel::onRender() {}
+    void ViewPanel::onRender() {}
 
-    void Panel::BridgePanel(Panel& target, AttachmentPosition position) {
+    void ViewPanel::BridgePanel(ViewPanel& target, AttachmentPosition position) {
         switch (position) {
             case AttachmentPosition::eTop:
                 top = &target;
