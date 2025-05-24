@@ -4,6 +4,7 @@
 
 #include "ufox_inputSystem.hpp"
 
+#include <_mingw_mac.h>
 
 
 namespace ufox {
@@ -30,9 +31,30 @@ namespace ufox {
         //fmt::println("position outside x:{} y:{}", currentLocalMouseX, currentLocalMouseY);
     }
 
-    void InputSystem::EnabledMousePositionOutside(bool state) {
+    void InputSystem::enabledMousePositionOutside(bool state) {
             if (mouseIsOutSideWindow != state)
                 mouseIsOutSideWindow = state;
     }
 
+    void InputSystem::setCursor(const CursorType type) {
+        if (currentCursor != type) {
+            switch (type) {
+                case CursorType::eDefault: {
+                    SDL_SetCursor(_defaultCursor.get());
+                    break;
+                }
+                case CursorType::eEWResize: {
+                    SDL_SetCursor(_ewResizeCursor.get());
+                    break;
+                }
+                default: {
+                    currentCursor = CursorType::eDefault;
+                    SDL_SetCursor(_defaultCursor.get());
+                    break;
+                }
+            }
+
+            currentCursor = type;
+        }
+    }
 }

@@ -17,11 +17,24 @@ int main() {
 
         ufox::gui::GUI gui(gpu);
 
-        ufox::Panel mainPanel{};
+        ufox::Panel mainPanel{input};
         mainPanel.rootElement.style.backgroundColor = {0.11f, 0.11f, 0.11f, 1.0f};
+        mainPanel.transform.x = 0;
+        mainPanel.transform.y = 0;
+
+
+        ufox::Panel sidePanel{input};
+        sidePanel.rootElement.style.backgroundColor = {0.5f, 0.5f, 0.5f, 1.0f};
+        sidePanel.transform.x = 400; // Right of mainPanel
+        sidePanel.transform.y = 0;
+
+
+        mainPanel.BridgePanel(sidePanel, ufox::AttachmentPosition::eRight);
+
 
 
         gui.elements.push_back(&mainPanel.rootElement);
+        gui.elements.push_back(&sidePanel.rootElement);
 
         gui.init();
 
@@ -48,6 +61,7 @@ int main() {
 
                         gpu.recreateSwapchain(window);
                         mainPanel.onResize(glm::vec2(w, h));
+                        sidePanel.onResize(glm::vec2(w, h));
                         break;
                     }
                     case SDL_EVENT_WINDOW_MINIMIZED: {
@@ -59,23 +73,24 @@ int main() {
                         break;
                     }
                     case SDL_EVENT_MOUSE_MOTION: {
-                        input.EnabledMousePositionOutside(false);
+                        input.enabledMousePositionOutside(false);
                         input.updateMousePositionInsideWindow();
-
+                        mainPanel.onUpdate(event);
+                        sidePanel.onUpdate(event);
 
                         break;
                     }
                     case SDL_EVENT_WINDOW_FOCUS_LOST: {
-                        input.EnabledMousePositionOutside(false);
+                        input.enabledMousePositionOutside(false);
                         break;
                     }
                     case SDL_EVENT_WINDOW_FOCUS_GAINED: {
-                        input.EnabledMousePositionOutside(true);
+                        input.enabledMousePositionOutside(true);
                         break;
                     }
                     default: {
                         if (event.motion.x == 0 || event.motion.y == 0) {
-                            input.EnabledMousePositionOutside(true);
+                            input.enabledMousePositionOutside(true);
                         }
 
                     }
@@ -84,7 +99,9 @@ int main() {
 
             input.updateMousePositionOutsideWindow(window.get());
 
+
             if (gpu.enableRender) {
+                gui.update();
                 const vk::raii::CommandBuffer& cmd = *gpu.beginFrame(window);
                 if (cmd != nullptr) {
 
@@ -93,7 +110,7 @@ int main() {
                     gui.draw(cmd);
 
                     gpu.endDynamicRendering(cmd);
-                    gui.update();
+
                     gpu.endFrame(cmd, window);
                 }
             }
