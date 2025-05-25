@@ -20,6 +20,13 @@ namespace ufox {
         eLeft
     };
 
+    enum class Align {
+        eColumn,
+        eRow,
+        eColumnReverse,
+        eRowReverse
+    };
+
     class ViewPanel {
     public:
         ViewPanel(InputSystem& input);
@@ -31,13 +38,20 @@ namespace ufox {
         }
 
         void onResize(const glm::vec2& newSize);
-        void onUpdate(const SDL_Event& event);
+        void onUpdate();
         void onRender();
         void BridgePanel(ViewPanel& target, AttachmentPosition position);
 
         core::TransformRect transform{};
         gui::GUIElement rootElement{};
         bool dockable{false};
+
+        Align splitterDirection{Align::eColumn};
+
+        ViewPanel* parent{nullptr};
+        std::vector<ViewPanel*> hierarchy{};
+
+
         ViewPanel* top{nullptr};
         ViewPanel* bottom{nullptr};
         ViewPanel* right{nullptr};

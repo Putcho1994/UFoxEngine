@@ -25,6 +25,7 @@ namespace ufox::gui {
         glm::vec4 cornerRadius; // Radius for each corner (top-left, top-right, bottom-right, bottom-left)
         glm::vec4 backgroundColor;
         glm::vec4 borderThickness; // Thickness for each side (top, right, bottom, left)
+        glm::vec4 margin;
         glm::vec4 borderTopColor; // RGBA color for top border
         glm::vec4 borderRightColor; // RGBA color for right border
         glm::vec4 borderBottomColor; // RGBA color for bottom border

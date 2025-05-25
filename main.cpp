@@ -6,10 +6,12 @@
 #include <Engine/ufox_view_panel.hpp>
 
 
+
+
 int main() {
     try {
         ufox::windowing::sdl::UfoxWindow window("UFoxEngine Test",
-            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+            SDL_WINDOW_VULKAN| SDL_WINDOW_RESIZABLE | SDL_WINDOW_TRANSPARENT);
         ufox::gpu::vulkan::GraphicsDevice gpu(window,
             "UFox Engine", vk::makeApiVersion(0, 1, 0,0),
             "UFox Application", vk::makeApiVersion(0,1,0,0));
@@ -17,24 +19,39 @@ int main() {
 
         ufox::gui::GUI gui(gpu);
 
-        ufox::ViewPanel mainPanel{input};
-        mainPanel.rootElement.style.backgroundColor = {0.11f, 0.11f, 0.11f, 1.0f};
-        mainPanel.transform.x = 0;
-        mainPanel.transform.y = 0;
+        ufox::ViewPanel titleBar{input};
+        titleBar.rootElement.style.backgroundColor = {0.14f, 0.15f, 0.16f, 1.0f};
+        titleBar.rootElement.style.cornerRadius = glm::vec4{7};
+        titleBar.rootElement.style.borderThickness = glm::vec4{1};
+        titleBar.rootElement.style.margin = glm::vec4{10};
+        titleBar.rootElement.style.borderTopColor = {0.2f, 0.2f, 0.2f, 1.0f};
+        titleBar.rootElement.style.borderBottomColor = {0.2f, 0.2f, 0.2f, 1.0f};
+        titleBar.rootElement.style.borderLeftColor = {0.2f, 0.2f, 0.2f, 1.0f};
+        titleBar.rootElement.style.borderRightColor = {0.2f, 0.2f, 0.2f, 1.0f};
+        titleBar.transform.x = 0;
+        titleBar.transform.y = 0;
+        //
+        // ufox::ViewPanel mainPanel{input};
+        // mainPanel.rootElement.style.backgroundColor = {0.11f, 0.11f, 0.11f, 1.0f};
+        // mainPanel.transform.x = 0;
+        // mainPanel.transform.y = 50;
+        //
+        //
+        // ufox::ViewPanel sidePanel{input};
+        // sidePanel.rootElement.style.backgroundColor = {0.5f, 0.5f, 0.5f, 1.0f};
+        // sidePanel.transform.x = 400; // Right of mainPanel
+        // sidePanel.transform.y = 50;
 
 
-        ufox::ViewPanel sidePanel{input};
-        sidePanel.rootElement.style.backgroundColor = {0.5f, 0.5f, 0.5f, 1.0f};
-        sidePanel.transform.x = 400; // Right of mainPanel
-        sidePanel.transform.y = 0;
-
-
-        mainPanel.BridgePanel(sidePanel, ufox::AttachmentPosition::eRight);
-
-
-
-        gui.elements.push_back(&mainPanel.rootElement);
-        gui.elements.push_back(&sidePanel.rootElement);
+        // mainPanel.BridgePanel(sidePanel, ufox::AttachmentPosition::eRight);
+        // titleBar.BridgePanel(mainPanel, ufox::AttachmentPosition::eBottom);
+        // titleBar.BridgePanel(sidePanel, ufox::AttachmentPosition::eRight);
+        //
+        //
+        //
+        gui.elements.push_back(&titleBar.rootElement);
+        // gui.elements.push_back(&mainPanel.rootElement);
+        // gui.elements.push_back(&sidePanel.rootElement);
 
         gui.init();
 
@@ -57,11 +74,12 @@ int main() {
                     }
                     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
                         window.updateSize();
-                        auto [w, h] = window.getSize();
+                        auto size = window.getSize();
 
                         gpu.recreateSwapchain(window);
-                        mainPanel.onResize(glm::vec2(w, h));
-                        sidePanel.onResize(glm::vec2(w, h));
+                        titleBar.onResize(size);
+                        // mainPanel.onResize(size);
+                        // sidePanel.onResize(size);
                         break;
                     }
                     case SDL_EVENT_WINDOW_MINIMIZED: {
@@ -72,36 +90,30 @@ int main() {
                         gpu.enableRender = true;
                         break;
                     }
-                    case SDL_EVENT_MOUSE_MOTION: {
-                        input.enabledMousePositionOutside(false);
-                        input.updateMousePositionInsideWindow();
-
+                    case SDL_EVENT_KEY_DOWN: {
+                    if (event.key.key == SDLK_SPACE) {
+                        fmt::println("Space");
+                        SDL_MaximizeWindow(window.get());
+                        gpu.recreateSwapchain(window);
+                        auto size = window.getSize();
+                        titleBar.onResize(size);
+                    }
 
                         break;
                     }
-                    case SDL_EVENT_WINDOW_FOCUS_LOST: {
-                        input.enabledMousePositionOutside(false);
-                        break;
-                    }
-                    case SDL_EVENT_WINDOW_FOCUS_GAINED: {
-                        input.enabledMousePositionOutside(true);
-                        break;
-                    }
 
-                    default: {
-                        if (event.motion.x == 0 || event.motion.y == 0) {
-                            input.enabledMousePositionOutside(true);
-                        }
-
-                    }
+                    default: {}
                 }
+                input.updateMouseEvents(event);
 
-                mainPanel.onUpdate(event);
-                sidePanel.onUpdate(event);
+                titleBar.onUpdate();
+                // mainPanel.onUpdate();
+                // sidePanel.onUpdate();
             }
 
             input.updateMousePositionOutsideWindow(window.get());
 
+            window.onUpdate(input);
 
             if (gpu.enableRender) {
                 gui.update();

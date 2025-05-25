@@ -19,6 +19,7 @@ namespace ufox {
 
     void InputSystem::updateMousePositionOutsideWindow(SDL_Window *window) {
         if (!mouseIsOutSideWindow) return;
+
         SDL_GetGlobalMouseState(&currentGlobalMouseX, &currentGlobalMouseY);
         if (currentGlobalMouseX == previousGlobalMouseX && currentGlobalMouseY == previousGlobalMouseY) return;
 
@@ -29,12 +30,52 @@ namespace ufox {
         previousGlobalMouseX = currentGlobalMouseX;
         previousGlobalMouseY = currentGlobalMouseY;
         //fmt::println("position outside x:{} y:{}", currentLocalMouseX, currentLocalMouseY);
+
     }
 
     void InputSystem::enabledMousePositionOutside(bool state) {
             if (mouseIsOutSideWindow != state)
                 mouseIsOutSideWindow = state;
     }
+
+    void InputSystem::updateMouseEvents(const SDL_Event &event) {
+        _isMouseButtonDown = false;
+        _isMouseButtonUp = false;
+
+
+        switch (event.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+                _isMouseButtonDown = true;
+
+                break;
+            }
+            case SDL_EVENT_MOUSE_BUTTON_UP: {
+                _isMouseButtonUp = true;
+
+                break;
+            }
+            case SDL_EVENT_MOUSE_MOTION: {
+
+                enabledMousePositionOutside(false);
+                updateMousePositionInsideWindow();
+                break;
+            }
+            case SDL_EVENT_WINDOW_FOCUS_LOST: {
+                enabledMousePositionOutside(false);
+                break;
+            }
+            case SDL_EVENT_WINDOW_FOCUS_GAINED: {
+                enabledMousePositionOutside(true);
+                break;
+            }
+            default: {
+                if (event.motion.x == 0 || event.motion.y == 0) {
+                    enabledMousePositionOutside(true);
+                }
+            }
+        }
+    }
+
 
     void InputSystem::setCursor(const CursorType type) {
         if (currentCursor != type) {

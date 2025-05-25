@@ -25,6 +25,26 @@ namespace ufox::core {
         }
     };
 
+    enum class DraggerDirection {
+        eBoth,
+        eVertical,
+        eHorizontal,
+    };
+
+    struct DraggerHandle {
+
+        DraggerHandle() = default;
+        DraggerHandle(DraggerDirection direction) : direction(direction) {}
+
+        TransformRect transform{0,0,0,0};
+        DraggerDirection direction{DraggerDirection::eBoth};
+
+        [[nodiscard]] bool isHovering(const glm::vec2& point) const {
+            return point.x >= transform.x && point.x <= transform.x + transform.width &&
+                   point.y >= transform.y && point.y <= transform.y + transform.height;
+        }
+    };
+
     struct TransformMatrix {
         glm::mat4 model;
         glm::mat4 view;

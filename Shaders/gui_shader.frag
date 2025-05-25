@@ -2,13 +2,17 @@
 
 layout(location = 0) in vec4 fragColor; // RGBA, with alpha as a base value
 layout(location = 1) in vec2 fragTexCoord;
-layout(location = 2) in vec2 fragScale; // Rectangle size from vertex shader
+layout(location = 2) in vec2 uvOffset;
+layout(location = 3) in vec2 uvTiling;
+layout(location = 4) in vec2 uv;
 
 layout(binding = 1) uniform sampler2D texSampler;
+
 layout(binding = 2) uniform GUIStyle {
     vec4 cornerRadius;       // x: top-left, y: top-right, z: bottom-left, w: bottom-right
     vec4 backgroundColor;
     vec4 borderThickness;   // x: top, y: right, z: bottom, w: left
+    vec4 margin;
     vec4 borderTopColor;    // Color for top border
     vec4 borderRightColor;  // Color for right border
     vec4 borderBottomColor; // Color for bottom border
@@ -36,16 +40,13 @@ vec3 lerp(vec3 colorA, vec3 colorB, float value) {
 }
 
 void main() {
-    // Calculate pixel position and center
-    vec2 pixelPos = fragTexCoord * fragScale;
-    vec2 center = fragScale * 0.5;
-    vec2 rectCorner = fragScale * 0.5;
-    vec2 centerPos = pixelPos - center;
+
+    vec2 rectCorner = uvOffset - vec2(params.margin.w + params.margin.y, params.margin.x + params.margin.z) * 0.5;
 
     // Compute border corner with optimized quadrant check
     vec2 borderCorner = rectCorner;
-    float yQuad = step(center.y, pixelPos.y); // 0 if above center, 1 if below
-    float xQuad = step(center.x, pixelPos.x); // 0 if left of center, 1 if right
+    float yQuad = step(uvOffset.y, uvTiling.y); // 0 if above center, 1 if below
+    float xQuad = step(uvOffset.x, uvTiling.x); // 0 if left of center, 1 if right
     borderCorner.y -= mix(params.borderThickness.x, params.borderThickness.z, yQuad); // Top or bottom thickness
     borderCorner.x -= mix(params.borderThickness.w, params.borderThickness.y, xQuad); // Left or right thickness
 
@@ -59,16 +60,17 @@ void main() {
     adjustedCornerRadius.w = max(params.cornerRadius.w - (maxThicknessX + maxThicknessY) * 0.5, 0.0); // Bottom-right
 
     // Compute SDF distances
-    float shapeDistance = roundedBoxSDF(centerPos, rectCorner, params.cornerRadius);
-    float backgroundDistance = roundedBoxSDF(centerPos, borderCorner, adjustedCornerRadius);
+    float shapeDistance = roundedBoxSDF(uv, rectCorner, params.cornerRadius);
+    float backgroundDistance = roundedBoxSDF(uv, borderCorner, adjustedCornerRadius);
 
     // Determine the closest edge color for the entire shape
     vec4 borderColor = params.borderTopColor; // Default to top color as fallback
-    float topDist = abs(pixelPos.y - (center.y + rectCorner.y));
-    float rightDist = abs(pixelPos.x - (center.x + rectCorner.x));
-    float bottomDist = abs(pixelPos.y - (center.y - rectCorner.y));
-    float leftDist = abs(pixelPos.x - (center.x - rectCorner.x));
+    float topDist = abs(uvTiling.y - (uvOffset.y + rectCorner.y));
+    float rightDist = abs(uvTiling.x - (uvOffset.x + rectCorner.x));
+    float bottomDist = abs(uvTiling.y - (uvOffset.y - rectCorner.y));
+    float leftDist = abs(uvTiling.x - (uvOffset.x - rectCorner.x));
     float minDist = min(min(topDist, rightDist), min(bottomDist, leftDist));
+
     if (minDist == topDist) {
         borderColor = params.borderTopColor;
     } else if (minDist == rightDist) {

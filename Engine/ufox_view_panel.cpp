@@ -7,11 +7,11 @@
 
 
 namespace ufox {
-    ViewPanel::ViewPanel(InputSystem& input) : _input(input){}
+    ViewPanel::ViewPanel(InputSystem& input) : _input(input) {}
     ViewPanel::~ViewPanel() = default;
 
     void ViewPanel::onResize(const glm::vec2& newSize) {
-        // Width: Check if panel is outside window width
+        //Width: Check if panel is outside window width
         if (newSize.x < transform.x) {
             transform.width = 0;
             if (left) {
@@ -45,19 +45,21 @@ namespace ufox {
         currentWindowSize = newSize;
     }
 
-    void ViewPanel::onUpdate(const SDL_Event& event){
+    void ViewPanel::onUpdate(){
         auto mousePos = _input.getMousePosition();
 
+
+
         if(enabledSplitterResizing) {
+            if (_input.isMouseButtonUp()) {
+                enabledSplitterResizing = false;
+            }
+
             float xPos = mousePos.x ;
             transform.x = glm::clamp(xPos, 0.0f, currentWindowSize.x);;
             if (left) {
                 left->onResize(currentWindowSize);
                 onResize(currentWindowSize);
-            }
-
-            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP ) {
-                enabledSplitterResizing = false;
             }
         }
         else {
@@ -68,7 +70,7 @@ namespace ufox {
                 // Check if mouse x is within splitter handle (y not constrained for simplicity)
                 if (mousePos.x >= splitterStart && mousePos.x <= splitterEnd) {
                     _input.setCursor(CursorType::eEWResize);
-                    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ) {
+                    if (_input.isMouseButtonDown() ) {
                         enabledSplitterResizing = true;
                     }
                 } else { _input.setCursor(CursorType::eDefault); }

@@ -9,6 +9,7 @@
 
 #include <SDL3/SDL_events.h>
 #include <fmt/core.h>
+#include <vector>
 
 namespace ufox {
 
@@ -16,6 +17,13 @@ namespace ufox {
         eDefault,
         eEWResize,
 
+    };
+
+    enum class MouseButtonState {
+        eNone,
+        eDown,
+        eUp,
+        eHold,
     };
 
 
@@ -33,13 +41,16 @@ namespace ufox {
         void updateMousePositionOutsideWindow(SDL_Window *window);
         void enabledMousePositionOutside(bool state);
 
+        void updateMouseEvents(const SDL_Event& event);
+
+        bool isMouseButtonDown() const{return _isMouseButtonDown;}
+        bool isMouseButtonUp() const{return _isMouseButtonUp;}
 
 
         SDL_Cursor* getDefaultCursor() const {return _defaultCursor.get();}
         SDL_Cursor* getEWResizeCursor() const {return _ewResizeCursor.get();}
 
-        void setCursor(const CursorType type);
-
+        void setCursor(CursorType type);
 
         private:
 
@@ -55,5 +66,9 @@ namespace ufox {
 
         std::unique_ptr<SDL_Cursor, decltype(&SDL_DestroyCursor)> _defaultCursor ={SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT), SDL_DestroyCursor};
         std::unique_ptr<SDL_Cursor, decltype(&SDL_DestroyCursor)> _ewResizeCursor ={SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE), SDL_DestroyCursor};
+
+        bool _isMouseButtonDown{false};
+        bool _isMouseButtonUp{false};
+
     };
 }

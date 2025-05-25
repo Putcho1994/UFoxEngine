@@ -13,8 +13,6 @@ namespace ufox::windowing::sdl
     UfoxWindow::UfoxWindow(const std::string& title, Uint32 flags):_window{nullptr, SDL_DestroyWindow} {
         if (!SDL_Init(SDL_INIT_VIDEO)) throw SDLException("Failed to initialize SDL");
 
-
-
         SDL_DisplayID primary = SDL_GetPrimaryDisplay();
         SDL_Rect usableBounds{};
         SDL_GetDisplayUsableBounds(primary, &usableBounds);
@@ -32,14 +30,23 @@ namespace ufox::windowing::sdl
 
         _window.reset(rawWindow);
 
-        SDL_SetWindowPosition(_window.get(), 2, 32);
+        SDL_SetWindowPosition(_window.get(), 50, 50);
 
 
         if (flags & SDL_WINDOW_VULKAN) {
             if (!SDL_Vulkan_LoadLibrary(nullptr)) throw SDLException("Failed to load Vulkan library");
         }
 
+        int w, h;
+        SDL_GetWindowPosition(_window.get(), &w, &h);
+        _position = glm::vec2(static_cast<float>(w),static_cast<float>(h));
+
         updateSize();
+
+        _topLeftResizeHandle.transform.x = _position.x -10;
+        _topLeftResizeHandle.transform.y = _position.y;
+        _topLeftResizeHandle.transform.width = 10;
+        _topLeftResizeHandle.transform.height = 25;
     }
 
     SDL_Window* UfoxWindow::get() const {
@@ -57,6 +64,17 @@ namespace ufox::windowing::sdl
     void UfoxWindow::updateSize(){
         int w, h;
         SDL_GetWindowSizeInPixels(_window.get(), &w, &h);
-        _size = std::make_pair(static_cast<uint32_t>(w),static_cast<uint32_t>(h));
+        _size = glm::vec2(static_cast<float>(w),static_cast<float>(h));
+        int x, y;
+        SDL_GetWindowPosition(_window.get(), &x, &y);
+        _position = glm::vec2(static_cast<float>(x),static_cast<float>(y));
+    }
+
+    void UfoxWindow::onUpdate(const InputSystem &inputSystem) {
+
+
+
+
     }
 }
+

@@ -255,8 +255,8 @@ namespace ufox::gpu::vulkan {
             swapchainExtent = capabilities.currentExtent;
         }
         else {
-            auto [windowExtentW, windowExtentH] = window.getSize();
-            vk::Extent2D extent { windowExtentW, windowExtentH };
+            auto size = window.getSize();
+            vk::Extent2D extent { static_cast<uint32_t>(size.x), static_cast<uint32_t>(size.y) };
             extent.width = std::clamp(extent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
             extent.height = std::clamp(extent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
             swapchainExtent = extent;
@@ -556,7 +556,7 @@ namespace ufox::gpu::vulkan {
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setLoadOp(vk::AttachmentLoadOp::eClear)
             .setStoreOp(vk::AttachmentStoreOp::eStore)
-            .setClearValue({std::array{0.5f, 0.5f, 0.5f, 1.0f}});
+            .setClearValue({std::array{0.0f, 0.0f, 0.0f, 0.0f}});
 
         vk::RenderingAttachmentInfo depthAttachment{};
         depthAttachment.setImageView(*depthImage.view)
